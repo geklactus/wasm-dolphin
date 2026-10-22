@@ -5,7 +5,7 @@ Subject: [PATCH] 0055-wgpu-clear-rect-probe-and-subrect-experiment
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 8a8a825c4b..8a5c9d7651 100644
+index 95144ac7ec..20e32b9e62 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -16,6 +16,7 @@

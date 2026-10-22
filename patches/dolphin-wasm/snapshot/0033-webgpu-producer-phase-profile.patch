@@ -78,7 +78,7 @@ index 6c735b5807..7ef59b143f 100644
    std::memset(destination, 0, plan.packet_size);
    for (u32 index = 0; index < classes.size(); ++index)
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 9a9485c6fa..63cab04bbf 100644
+index 59783b99e2..f8e4c17f89 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -31,6 +31,7 @@

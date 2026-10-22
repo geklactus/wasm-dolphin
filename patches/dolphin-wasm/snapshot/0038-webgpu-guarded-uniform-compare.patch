@@ -5,7 +5,7 @@ Subject: [PATCH] 0038-webgpu-guarded-uniform-compare
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index c86638118f..2a05acbb39 100644
+index 82a54e32d0..3c93ee36a2 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -33,6 +33,7 @@
@@ -239,7 +239,7 @@ index c86638118f..2a05acbb39 100644
    if (off == kUboOffNone)
      return;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 06b952773f..cea68eb611 100644
+index b5db24b836..8eb0eb2236 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -190,7 +190,7 @@ private:

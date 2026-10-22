@@ -5,7 +5,7 @@ Subject: [PATCH] 0026-webgpu-geometry-lifecycle-invalidation
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 1e1bd4c85a..a8b7921ec4 100644
+index 4c8a728305..d357263c76 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -95,7 +95,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuGeometryPackEnabled(int enabled)

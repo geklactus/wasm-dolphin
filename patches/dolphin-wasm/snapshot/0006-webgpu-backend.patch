@@ -1441,10 +1441,10 @@ index 0000000000..cd446061d3
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 new file mode 100644
-index 0000000000..461c93ed72
+index 0000000000..a45863e175
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -0,0 +1,1320 @@
+@@ -0,0 +1,1325 @@
 +// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -2742,24 +2742,29 @@ index 0000000000..461c93ed72
 +  return {640, 480, 1.0f, AbstractTextureFormat::BGRA8};
 +}
 +
-+void WebGPUEFBInterface::ReinterpretPixelData(EFBReinterpretType /* convtype */)
++void WebGPUEFBInterface::ReinterpretPixelData(FramebufferManager* /* framebuffer_manager */,
++                                              EFBReinterpretType /* convtype */)
 +{
 +}
 +
-+void WebGPUEFBInterface::PokeColor(u16 /* x */, u16 /* y */, u32 /* color */)
++void WebGPUEFBInterface::PokeColor(FramebufferManager* /* framebuffer_manager */, u16 /* x */,
++                                   u16 /* y */, u32 /* color */)
 +{
 +}
 +
-+void WebGPUEFBInterface::PokeDepth(u16 /* x */, u16 /* y */, u32 /* depth */)
++void WebGPUEFBInterface::PokeDepth(FramebufferManager* /* framebuffer_manager */, u16 /* x */,
++                                   u16 /* y */, u32 /* depth */)
 +{
 +}
 +
-+u32 WebGPUEFBInterface::PeekColorInternal(u16 /* x */, u16 /* y */)
++u32 WebGPUEFBInterface::PeekColorInternal(FramebufferManager* /* framebuffer_manager */,
++                                          u16 /* x */, u16 /* y */)
 +{
 +  return 0;
 +}
 +
-+u32 WebGPUEFBInterface::PeekDepthInternal(u16 /* x */, u16 /* y */)
++u32 WebGPUEFBInterface::PeekDepthInternal(FramebufferManager* /* framebuffer_manager */,
++                                          u16 /* x */, u16 /* y */)
 +{
 +  return 0;
 +}
@@ -2767,10 +2772,10 @@ index 0000000000..461c93ed72
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 new file mode 100644
-index 0000000000..0c98aff8ac
+index 0000000000..2cd78c1ae2
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,283 @@
 +// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -3043,13 +3048,14 @@ index 0000000000..0c98aff8ac
 +
 +class WebGPUEFBInterface final : public EFBInterfaceBase
 +{
-+  void ReinterpretPixelData(EFBReinterpretType convtype) override;
++  void ReinterpretPixelData(FramebufferManager* framebuffer_manager,
++                            EFBReinterpretType convtype) override;
 +
-+  void PokeColor(u16 x, u16 y, u32 color) override;
-+  void PokeDepth(u16 x, u16 y, u32 depth) override;
++  void PokeColor(FramebufferManager* framebuffer_manager, u16 x, u16 y, u32 color) override;
++  void PokeDepth(FramebufferManager* framebuffer_manager, u16 x, u16 y, u32 depth) override;
 +
-+  u32 PeekColorInternal(u16 x, u16 y) override;
-+  u32 PeekDepthInternal(u16 x, u16 y) override;
++  u32 PeekColorInternal(FramebufferManager* framebuffer_manager, u16 x, u16 y) override;
++  u32 PeekDepthInternal(FramebufferManager* framebuffer_manager, u16 x, u16 y) override;
 +};
 +
 +}  // namespace WebGPU

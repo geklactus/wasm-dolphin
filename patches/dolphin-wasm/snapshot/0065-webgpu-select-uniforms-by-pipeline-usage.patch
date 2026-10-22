@@ -5,7 +5,7 @@ Subject: [PATCH] 0065-webgpu-select-uniforms-by-pipeline-usage
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 9caefbd018..b4410ed707 100644
+index 4046a84eb8..46d41b1547 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -827,7 +827,10 @@ std::unique_ptr<AbstractShader> WebGPUGfx::CreateShaderFromBinary(ShaderStage st
@@ -194,7 +194,7 @@ index 9caefbd018..b4410ed707 100644
  
  void WebGPUGfx::ScaleTexture(AbstractFramebuffer* dst_framebuffer,
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 756cedc9f1..bf7cda7978 100644
+index f2bf775b1e..f01cf906f1 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -300,10 +300,9 @@ private:

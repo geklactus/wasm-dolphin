@@ -177,7 +177,7 @@ index 4ffe7c21a5..f9dba06ff1 100644
    // BEGIN_PASS..END_PASS records stay private until END_PASS can publish the
    // entire batch. Resource creation/uploads remain immediate so the consumer
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 558dacec42..d18d8125f8 100644
+index bb861a24be..efd3cf33cb 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -91,6 +91,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuGeometryPackEnabled(int enabled)

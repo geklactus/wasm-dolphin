@@ -20,7 +20,7 @@ index 7dbe6a2ce5..7564fc15d8 100644
  };
  
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index eb0e93632a..a2cba9f4c3 100644
+index ba8979ec36..b6fbff6e37 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -1243,6 +1243,9 @@ void WebGPUGfx::ShowImage(const AbstractTexture* source_texture,

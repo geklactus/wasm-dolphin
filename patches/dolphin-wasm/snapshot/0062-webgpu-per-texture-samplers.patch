@@ -5,7 +5,7 @@ Subject: [PATCH] 0062-webgpu-per-texture-samplers
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index f8d6755e56..ab25f7440f 100644
+index ce87a24a8b..6ac8f005cf 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -600,8 +600,19 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
@@ -148,7 +148,7 @@ index f8d6755e56..ab25f7440f 100644
  
  u32 WebGPUGfx::RefreshUboControlMode()
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index d80bf04c15..756cedc9f1 100644
+index 442fa63f66..f2bf775b1e 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -4,6 +4,7 @@

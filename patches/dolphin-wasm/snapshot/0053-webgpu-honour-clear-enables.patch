@@ -5,7 +5,7 @@ Subject: [PATCH] 0053-webgpu-honour-clear-enables
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 3ec15d78a2..8a8a825c4b 100644
+index e2eaf6fbf9..95144ac7ec 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -1094,6 +1094,11 @@ bool WebGPUGfx::BindBackbuffer(const ClearColor& clear_color)
@@ -113,7 +113,7 @@ index 3ec15d78a2..8a8a825c4b 100644
    m_clear_col[0] = color_value[0];
    m_clear_col[1] = color_value[1];
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index cea68eb611..d80bf04c15 100644
+index 8eb0eb2236..442fa63f66 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -162,6 +162,7 @@ private:

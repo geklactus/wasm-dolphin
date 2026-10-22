@@ -214,7 +214,7 @@ index 69569b8558..4ffe7c21a5 100644
    // BEGIN_PASS..END_PASS records stay private until END_PASS can publish the
    // entire batch. Resource creation/uploads remain immediate so the consumer
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 2a37096900..558dacec42 100644
+index 4dd6077c89..bb861a24be 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -61,6 +61,8 @@ std::atomic<u64> s_ubo_cache_hits[3]{};

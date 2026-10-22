@@ -18,7 +18,7 @@ index 1697940d42..bcb9a11857 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 4217c0f30b..ced9eeb3d3 100644
+index 5048fa065d..4ca4b0402d 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -53,6 +53,14 @@ std::atomic<u64> s_pipeline_records_suppressed{0};
@@ -358,7 +358,7 @@ index 4217c0f30b..ced9eeb3d3 100644
    if (off == kUboOffNone)
      return;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index fee5324d6f..0329a08e8a 100644
+index 4be72fefa6..ab78958197 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -180,7 +180,22 @@ private:

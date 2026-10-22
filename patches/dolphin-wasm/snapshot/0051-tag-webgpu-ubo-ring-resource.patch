@@ -67,7 +67,7 @@ index 0b8745dd48..3c7c729fc8 100644
                          BufferUploadRole role);
    u32 PushCreateTexture(u32 w, u32 h, u32 wgpu_format, u32 usage_flags, u32 layers = 1);
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 1fbda3fdb4..3ec15d78a2 100644
+index 3e2dccfabc..e2eaf6fbf9 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -1490,7 +1490,8 @@ bool WebGPUGfx::PrepareDrawResources()

@@ -269,7 +269,7 @@ index 633319abf3..d5c05b447a 100644
 +extern "C" const char* GetWebGpuDenseUboSmokeError();
  }  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index a8b7921ec4..2fb91529fd 100644
+index d357263c76..b368c26bfd 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -68,6 +68,7 @@ std::atomic<u64> s_ubo_packet_payload_bytes{0};

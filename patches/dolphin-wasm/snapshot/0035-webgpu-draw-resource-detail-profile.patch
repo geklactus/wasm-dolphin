@@ -39,7 +39,7 @@ index 7ef59b143f..e60947644e 100644
    return true;
  }
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index c7e798c8eb..a724559528 100644
+index 80cf50343f..3c4d5abbeb 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -31,6 +31,7 @@

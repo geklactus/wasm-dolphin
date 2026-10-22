@@ -619,7 +619,7 @@ index 91c48b9786..0b8745dd48 100644
    u8* m_upload_base = nullptr;
    u32 m_upload_size = 0;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 2a05acbb39..d14faf81ae 100644
+index 3c93ee36a2..90afc1c8d4 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -127,6 +127,31 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuUploadArenaMiB(int mib, int metric

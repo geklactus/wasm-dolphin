@@ -18,7 +18,7 @@ index ccc42e182c..b4ba1e46e5 100644
      # elimination. -lworkerfs.js / -lnodefs.js above only make the JS
      # libraries available to the link; current Emscripten still drops a JS
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index a2cba9f4c3..f8d6755e56 100644
+index b6fbff6e37..ce87a24a8b 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -40,12 +40,32 @@

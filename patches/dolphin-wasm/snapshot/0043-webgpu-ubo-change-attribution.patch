@@ -5,7 +5,7 @@ Subject: [PATCH] 0043-webgpu-ubo-change-attribution
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index d14faf81ae..1fbda3fdb4 100644
+index 90afc1c8d4..3e2dccfabc 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -73,6 +73,15 @@ std::atomic<u64> s_ubo_packet_payload_bytes{0};

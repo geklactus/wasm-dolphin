@@ -5,7 +5,7 @@ Subject: [PATCH] 0064-webgpu-expire-retained-uniform-slices
 
 
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index ab25f7440f..9caefbd018 100644
+index 6ac8f005cf..4046a84eb8 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -1854,7 +1854,9 @@ bool WebGPUGfx::PrepareDrawResources()

@@ -147,7 +147,7 @@ index 925f74b90a..2017de67ab 100644
    void PushSetScissor(u32 x, u32 y, u32 w, u32 h);
    void PushDraw(u32 vtx_count, u32 inst_count, u32 first_vtx);
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 461c93ed72..6a536c6b52 100644
+index a45863e175..79b5cab11a 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -33,8 +33,11 @@
@@ -444,7 +444,7 @@ index 461c93ed72..6a536c6b52 100644
    // Utility draw consumed — revert to the GX bg0 for following draws.
    m_util_uniform_mode = false;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 0c98aff8ac..06dba16fcf 100644
+index 2cd78c1ae2..a43d751552 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -163,9 +163,15 @@ private:

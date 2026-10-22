@@ -12,7 +12,6 @@ on:
     branches:
       - "rebase/**"
       - "core/**"
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -54,9 +53,11 @@ jobs:
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rust-src --target wasm32-unknown-emscripten
           "$HOME/.rustup/toolchains/${RUST_TOOLCHAIN}-x86_64-unknown-linux-gnu/bin/rustc" --version --verbose
 
-      - name: Cache the Emscripten SDK
+      # restore/save pairs with `if: always()` on the save: a failing build still keeps its
+      # compiled system libraries and its compiler cache for the next attempt.
+      - name: Restore the Emscripten SDK
         id: emsdk-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/emsdk
           key: emsdk-${{ env.EMSDK_COMMIT }}-${{ env.EMSDK_VERSION }}-v1
@@ -84,12 +85,11 @@ jobs:
           ccache --zero-stats
 
       - name: Restore the compiler cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-core-${{ hashFiles('provenance/dolphin-source.lock.json', 'provenance/wasm-toolchain.linux-x64.lock.json') }}-${{ github.sha }}
+          key: ccache-core-${{ github.sha }}
           restore-keys: |
-            ccache-core-${{ hashFiles('provenance/dolphin-source.lock.json', 'provenance/wasm-toolchain.linux-x64.lock.json') }}-
             ccache-core-
 
       - name: Toolchain lock
@@ -137,6 +137,7 @@ jobs:
       - name: Build the core
         env:
           BUILD_PARALLELISM: "4"
+          BUILD_KEEP_GOING: "1"
           # A run that recorded the toolchain lock has that file modified; the build
           # evidence records the override and the path.
           DOLPHIN_ALLOW_DIRTY_BUILD: ${{ steps.toolchain.outputs.recorded == 'true' && '1' || '' }}
@@ -145,6 +146,20 @@ jobs:
       - name: Compiler cache statistics
         if: always()
         run: ccache --show-stats
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-core-${{ github.sha }}
+
+      - name: Save the Emscripten SDK
+        if: always() && steps.emsdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSDK_COMMIT }}-${{ env.EMSDK_VERSION }}-v1
 
       - name: Upload the core
         uses: actions/upload-artifact@v4
