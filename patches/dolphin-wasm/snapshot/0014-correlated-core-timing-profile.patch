@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:31 +0000
+Subject: [PATCH] 0014-correlated-core-timing-profile
+
+
 diff --git a/Source/Core/Core/CoreTiming.cpp b/Source/Core/Core/CoreTiming.cpp
-index fad0e6e..247a30c 100644
+index fad0e6e9d4..247a30c107 100644
 --- a/Source/Core/Core/CoreTiming.cpp
 +++ b/Source/Core/Core/CoreTiming.cpp
 @@ -6,6 +6,7 @@
@@ -74,8 +80,43 @@ index fad0e6e..247a30c 100644
    }
    else
    {
+diff --git a/Source/Core/Core/HW/DVD/DVDThread.cpp b/Source/Core/Core/HW/DVD/DVDThread.cpp
+index e7b40fa629..f03498aae1 100644
+--- a/Source/Core/Core/HW/DVD/DVDThread.cpp
++++ b/Source/Core/Core/HW/DVD/DVDThread.cpp
+@@ -19,6 +19,9 @@
+ #include "Core/ConfigManager.h"
+ #include "Core/Core.h"
+ #include "Core/CoreTiming.h"
++#ifdef __EMSCRIPTEN__
++#include "Core/WasmTimingProfile.h"
++#endif
+ #include "Core/HW/DVD/DVDInterface.h"
+ #include "Core/HW/DVD/FileMonitor.h"
+ #include "Core/HW/Memmap.h"
+@@ -246,7 +249,20 @@ void DVDThread::FinishRead(u64 id, s64 cycles_late)
+   {
+     while (true)
+     {
++#ifdef __EMSCRIPTEN__
++      const bool profile_wait = DolphinWeb::WasmTimingProfile::IsSliceActive();
++      const auto wait_started_at = profile_wait ?
++                                       DolphinWeb::WasmTimingProfile::Clock::now() :
++                                       DolphinWeb::WasmTimingProfile::Clock::time_point{};
++#endif
+       m_result_queue.WaitForData();
++#ifdef __EMSCRIPTEN__
++      if (profile_wait)
++      {
++        DolphinWeb::WasmTimingProfile::RecordDvdWaitUs(DolphinWeb::WasmTimingProfile::ElapsedMicros(
++            wait_started_at, DolphinWeb::WasmTimingProfile::Clock::now()));
++      }
++#endif
+       m_result_queue.Pop(result);
+       if (result.first.id == id)
+         break;
 diff --git a/Source/Core/Core/HW/VideoInterface.cpp b/Source/Core/Core/HW/VideoInterface.cpp
-index e4ada4e..0bda6ef 100644
+index e4ada4ef6e..0bda6efdf2 100644
 --- a/Source/Core/Core/HW/VideoInterface.cpp
 +++ b/Source/Core/Core/HW/VideoInterface.cpp
 @@ -27,6 +27,9 @@
@@ -155,43 +196,8 @@ index e4ada4e..0bda6ef 100644
    }
  #endif
  
-diff --git a/Source/Core/Core/HW/DVD/DVDThread.cpp b/Source/Core/Core/HW/DVD/DVDThread.cpp
-index e7b40fa..f03498a 100644
---- a/Source/Core/Core/HW/DVD/DVDThread.cpp
-+++ b/Source/Core/Core/HW/DVD/DVDThread.cpp
-@@ -19,6 +19,9 @@
- #include "Core/ConfigManager.h"
- #include "Core/Core.h"
- #include "Core/CoreTiming.h"
-+#ifdef __EMSCRIPTEN__
-+#include "Core/WasmTimingProfile.h"
-+#endif
- #include "Core/HW/DVD/DVDInterface.h"
- #include "Core/HW/DVD/FileMonitor.h"
- #include "Core/HW/Memmap.h"
-@@ -246,7 +249,20 @@ void DVDThread::FinishRead(u64 id, s64 cycles_late)
-   {
-     while (true)
-     {
-+#ifdef __EMSCRIPTEN__
-+      const bool profile_wait = DolphinWeb::WasmTimingProfile::IsSliceActive();
-+      const auto wait_started_at = profile_wait ?
-+                                       DolphinWeb::WasmTimingProfile::Clock::now() :
-+                                       DolphinWeb::WasmTimingProfile::Clock::time_point{};
-+#endif
-       m_result_queue.WaitForData();
-+#ifdef __EMSCRIPTEN__
-+      if (profile_wait)
-+      {
-+        DolphinWeb::WasmTimingProfile::RecordDvdWaitUs(DolphinWeb::WasmTimingProfile::ElapsedMicros(
-+            wait_started_at, DolphinWeb::WasmTimingProfile::Clock::now()));
-+      }
-+#endif
-       m_result_queue.Pop(result);
-       if (result.first.id == id)
-         break;
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-index b3e0f91..fb44b64 100644
+index 7c51e06343..48b0ac741d 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -31,6 +31,9 @@
@@ -220,7 +226,7 @@ index b3e0f91..fb44b64 100644
    s_wasm_instance_us_total.fetch_add(static_cast<u32>(dt_us), std::memory_order_relaxed);
    u32 prev_max = s_wasm_instance_us_max.load(std::memory_order_relaxed);
    while (static_cast<u32>(dt_us) > prev_max &&
-@@ -7867,11 +7872,9 @@ void CachedInterpreter::Run()
+@@ -7873,11 +7878,9 @@ void CachedInterpreter::Run()
    const CPU::State* state_ptr = m_system.GetCPU().GetStatePtr();
    while (*state_ptr == CPU::State::Running)
    {
@@ -235,7 +241,7 @@ index b3e0f91..fb44b64 100644
      // §28ce: peak burst stats — snapshot last slice's totals into the
      // burst-max atomics, then reset the per-slice counters before entering
      // the new slice. Done unconditionally (independent of throttle gate)
-@@ -7897,10 +7900,17 @@ void CachedInterpreter::Run()
+@@ -7903,10 +7906,17 @@ void CachedInterpreter::Run()
        s_wasm_compile_us_this_slice = 0;
      }
      // Start new timing slice
@@ -255,7 +261,7 @@ index b3e0f91..fb44b64 100644
  
      do
      {
-@@ -7912,41 +7922,43 @@ void CachedInterpreter::Run()
+@@ -7918,41 +7928,43 @@ void CachedInterpreter::Run()
      // it AFTER the slice has run, just before the reset zeros it on the
      // next iteration). Actually we need the read BEFORE the next iteration
      // resets it — so capture it on this iteration's tail.
@@ -333,7 +339,7 @@ index b3e0f91..fb44b64 100644
      }
    }
  }
-@@ -10877,6 +10889,7 @@ extern "C" void SetPpcProfileEnabled(int enabled)
+@@ -10883,6 +10895,7 @@ extern "C" void SetPpcProfileEnabled(int enabled)
    if (next_enabled && !s_ppc_block_profile_enabled)
      ResetPpcBlockProfile();
    s_ppc_block_profile_enabled = next_enabled;
@@ -341,7 +347,7 @@ index b3e0f91..fb44b64 100644
  }
  
  extern "C" const char* GetPpcProfileStats()
-@@ -11056,6 +11069,13 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11062,6 +11075,13 @@ extern "C" const char* GetPpcWasmHelperStats()
    out << "runloop:" << runloop_count << "slices/avg" << runloop_avg
        << "us/max" << runloop_max << "us/runOnlyMax" << runloop_runonly_max << "us"
        << "/advMax" << runloop_advance_max << "us/execMax" << runloop_exec_max << "us ";
@@ -357,7 +363,7 @@ index b3e0f91..fb44b64 100644
    out << " | imports system:" << s_wasm_system_call_count << " fp:" << s_wasm_fp_call_count
 diff --git a/Source/Core/Core/WasmTimingProfile.h b/Source/Core/Core/WasmTimingProfile.h
 new file mode 100644
-index 0000000..13c8b37
+index 0000000000..13c8b377f6
 --- /dev/null
 +++ b/Source/Core/Core/WasmTimingProfile.h
 @@ -0,0 +1,240 @@
@@ -601,4 +607,3 @@ index 0000000..13c8b37
 +}  // namespace DolphinWeb::WasmTimingProfile
 +
 +#endif  // __EMSCRIPTEN__
-

@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:35 +0000
+Subject: [PATCH] 0043-webgpu-ubo-change-attribution
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 index d14faf81ae..1fbda3fdb4 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp

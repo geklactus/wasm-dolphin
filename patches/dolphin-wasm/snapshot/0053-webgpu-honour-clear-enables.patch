@@ -1,6 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:13 +0000
+Subject: [PATCH] 0053-webgpu-honour-clear-enables
+
+
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index 3ec15d78a2..8a8a825c4b 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -1094,6 +1094,11 @@
+@@ -1094,6 +1094,11 @@ bool WebGPUGfx::BindBackbuffer(const ClearColor& clear_color)
    m_clear_col[1] = clear_color[1];
    m_clear_col[2] = clear_color[2];
    m_clear_col[3] = clear_color[3];
@@ -12,7 +20,7 @@
    m_pending_clear = true;
    return BeginPassIfNeeded();
  }
-@@ -1226,7 +1231,7 @@
+@@ -1226,7 +1231,7 @@ void WebGPUGfx::ShowImage(const AbstractTexture* source_texture,
  }
  
  void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& /* target_rc */, bool color_enable,
@@ -21,7 +29,7 @@
  {
    // Day-33 Phase C: the game's BP clear-screen. Without this the EFB
    // depth buffer is never initialised, so every drawn primitive fails
-@@ -1239,19 +1244,25 @@
+@@ -1239,19 +1244,25 @@ void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& /* target_rc */, boo
    if (!m_cmd_stream.ready())
      return;
    EndPassIfOpen();
@@ -52,7 +60,7 @@
    BeginPassIfNeeded();
  }
  
-@@ -1417,6 +1428,8 @@
+@@ -1417,6 +1428,8 @@ bool WebGPUGfx::EndPassIfOpen()
    if (committed)
    {
      m_pending_clear = false;
@@ -61,7 +69,7 @@
      return true;
    }
    m_cmd_stream.AbortPass();
-@@ -1426,6 +1439,23 @@
+@@ -1426,6 +1439,23 @@ bool WebGPUGfx::EndPassIfOpen()
    return false;
  }
  
@@ -85,7 +93,7 @@
  bool WebGPUGfx::BeginPassIfNeeded()
  {
    if (m_pass_open)
-@@ -1437,7 +1467,7 @@
+@@ -1437,7 +1467,7 @@ bool WebGPUGfx::BeginPassIfNeeded()
    }
    if (!m_cmd_stream.PushBeginPass(m_fb_color_id, m_clear_col[0], m_clear_col[1],
                                    m_clear_col[2], m_clear_col[3],
@@ -94,7 +102,7 @@
    {
      AbortRecordedPass();
      return false;
-@@ -2071,6 +2101,9 @@
+@@ -2071,6 +2101,9 @@ void WebGPUGfx::SetAndClearFramebuffer(AbstractFramebuffer* framebuffer,
                                         const ClearColor& color_value, float /* depth_value */)
  {
    SetFramebuffer(framebuffer);
@@ -104,9 +112,11 @@
    m_pending_clear = true;
    m_clear_col[0] = color_value[0];
    m_clear_col[1] = color_value[1];
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
+index cea68eb611..d80bf04c15 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-@@ -162,6 +162,7 @@
+@@ -162,6 +162,7 @@ private:
    // (lazy — VideoCommon binds the FB then draws). Re-emits viewport/
    // scissor since a new WebGPU pass resets them.
    bool BeginPassIfNeeded();
@@ -114,7 +124,7 @@
    bool EndPassIfOpen();
    void AbortRecordedPass();
    void DiscardOrAbortPendingGeometryRange();
-@@ -202,6 +203,8 @@
+@@ -202,6 +203,8 @@ private:
    u32 m_fb_color_id = 0;  // 0 = backbuffer
    u32 m_fb_depth_id = 0;
    bool m_pending_clear = false;

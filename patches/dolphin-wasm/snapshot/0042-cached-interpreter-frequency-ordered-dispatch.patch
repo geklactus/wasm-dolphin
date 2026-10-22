@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:35 +0000
+Subject: [PATCH] 0042-cached-interpreter-frequency-ordered-dispatch
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-index f82426f62c..85b38788fe 100644
+index 53a64884f4..fda71f5818 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -58,6 +58,10 @@
@@ -13,7 +19,7 @@ index f82426f62c..85b38788fe 100644
  #if DOLPHIN_WEB_HOT_COUNTERS
  #define DOLPHIN_WEB_HOT_COUNT(statement) \
    do                                         \
-@@ -7730,6 +7734,65 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
+@@ -7736,6 +7740,65 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
        Interpret<false>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
        normal_entry = payload + sizeof(InterpretOperands);
      }
@@ -79,7 +85,7 @@ index f82426f62c..85b38788fe 100644
      else if (callback == AnyCallbackCast(Interpret<true>))
      {
        Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-@@ -7784,6 +7847,8 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
+@@ -7790,6 +7853,8 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
        else
          break;
      }

@@ -1,11 +1,11 @@
-From 94667ca61df1cb0d321dc49e67cec0a2c3dda404 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: wasm-dolphin patch snapshot <snapshot@local.invalid>
-Date: Thu, 9 Jul 2026 14:42:30 -1000
-Subject: [PATCH 2/6] Browser audio snapshot
+Date: Thu, 22 Oct 2026 14:11:47 +0000
+Subject: [PATCH] 0002-browser-audio
 
 
 diff --git a/Source/Core/AudioCommon/AudioCommon.cpp b/Source/Core/AudioCommon/AudioCommon.cpp
-index 73e1094..332f2e5 100644
+index 73e1094a69..332f2e522f 100644
 --- a/Source/Core/AudioCommon/AudioCommon.cpp
 +++ b/Source/Core/AudioCommon/AudioCommon.cpp
 @@ -3,6 +3,12 @@
@@ -121,7 +121,7 @@ index 73e1094..332f2e5 100644
  {
    const SoundStream* const sound_stream = system.GetSoundStream();
 diff --git a/Source/Core/AudioCommon/CMakeLists.txt b/Source/Core/AudioCommon/CMakeLists.txt
-index 04ad967..b7f9248 100644
+index 04ad967234..b7f9248660 100644
 --- a/Source/Core/AudioCommon/CMakeLists.txt
 +++ b/Source/Core/AudioCommon/CMakeLists.txt
 @@ -13,6 +13,13 @@ add_library(audiocommon
@@ -140,7 +140,7 @@ index 04ad967..b7f9248 100644
    target_sources(audiocommon PRIVATE
 diff --git a/Source/Core/AudioCommon/WebAudioStream.cpp b/Source/Core/AudioCommon/WebAudioStream.cpp
 new file mode 100644
-index 0000000..6c2a51a
+index 0000000000..6c2a51a425
 --- /dev/null
 +++ b/Source/Core/AudioCommon/WebAudioStream.cpp
 @@ -0,0 +1,59 @@
@@ -205,7 +205,7 @@ index 0000000..6c2a51a
 +}
 diff --git a/Source/Core/AudioCommon/WebAudioStream.h b/Source/Core/AudioCommon/WebAudioStream.h
 new file mode 100644
-index 0000000..c07dd18
+index 0000000000..c07dd18862
 --- /dev/null
 +++ b/Source/Core/AudioCommon/WebAudioStream.h
 @@ -0,0 +1,28 @@

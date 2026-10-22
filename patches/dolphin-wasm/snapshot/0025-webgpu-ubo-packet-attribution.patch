@@ -1,8 +1,15 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0025-webgpu-ubo-packet-attribution
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 884ae85..19c011e 100644
+index d18d8125f8..1e1bd4c85a 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -62,5 +62,12 @@ std::atomic<u64> s_ubo_cache_expired[3]{};
+@@ -61,6 +61,13 @@ std::atomic<u64> s_ubo_cache_hits[3]{};
+ std::atomic<u64> s_ubo_cache_expired[3]{};
  std::atomic<u64> s_ubo_upload_calls_suppressed[3]{};
  std::atomic<u64> s_ubo_upload_bytes_suppressed[3]{};
 +std::atomic<u64> s_ubo_change_mask_histogram[8]{};
@@ -15,7 +22,7 @@ index 884ae85..19c011e 100644
  std::atomic<bool> s_geometry_upload_pack_enabled{false};
  std::atomic<u64> s_geometry_upload_pack_epoch{0};
  }
-@@ -104,6 +111,44 @@ u64 GetGeometryUploadPackEpoch()
+@@ -106,6 +113,44 @@ u64 GetGeometryUploadPackEpoch()
    return s_geometry_upload_pack_epoch.load(std::memory_order_acquire);
  }
  
@@ -60,7 +67,7 @@ index 884ae85..19c011e 100644
  extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
  {
    static std::string stats;
-@@ -140,6 +185,24 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
+@@ -139,6 +184,24 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
        << " usupbyte:" << s_ubo_upload_bytes_suppressed[0].load(std::memory_order_relaxed) << ","
        << s_ubo_upload_bytes_suppressed[1].load(std::memory_order_relaxed) << ","
        << s_ubo_upload_bytes_suppressed[2].load(std::memory_order_relaxed)
@@ -85,7 +92,7 @@ index 884ae85..19c011e 100644
        << " wggeom:" << (s_geometry_upload_pack_enabled.load(std::memory_order_relaxed) ? 1 : 0)
        << " wggeomepoch:" << s_geometry_upload_pack_epoch.load(std::memory_order_relaxed)
        << " wgarena:" << GetCommandStream().GetUploadArenaRequestedBytes() << ","
-@@ -1027,6 +1090,8 @@ bool WebGPUGfx::PrepareDrawResources()
+@@ -1026,6 +1089,8 @@ bool WebGPUGfx::PrepareDrawResources()
  {
    auto& system = Core::System::GetInstance();
    const bool ubo_cache_enabled = RefreshUboCacheState();

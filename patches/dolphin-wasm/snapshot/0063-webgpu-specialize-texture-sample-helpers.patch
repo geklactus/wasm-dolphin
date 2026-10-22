@@ -1,7 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:14 +0000
+Subject: [PATCH] 0063-webgpu-specialize-texture-sample-helpers
+
+
 diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommon/PixelShaderGen.cpp
+index 18dd8d57bd..c7307371de 100644
 --- a/Source/Core/VideoCommon/PixelShaderGen.cpp
 +++ b/Source/Core/VideoCommon/PixelShaderGen.cpp
-@@ -638,29 +638,44 @@
+@@ -638,29 +638,44 @@ uint WrapCoord(int coord, uint wrap, int size) {{
      }
    }
  
@@ -20,21 +27,15 @@ diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommo
 -                BitfieldExtract<&SamplerState::TM0::lod_bias>("texmode0"));
 -    }
 -    else
--    {
--      out.Write("  return iround(255.0 * texture(SAMP_USE,coords));\n");
--    }
--
--    out.Write("}}\n");
--  }
--  else
--  {
 +    // WebGPU validates texture/sampler pairs across calls to a shared opaque-
 +    // parameter helper. Different call sites can then cross-pair a depth
 +    // texture with another slot's linear sampler. Keep each hardware sample
 +    // tied to its slot's globals; scalar-only helpers can still be shared.
 +    const bool static_sampler = api_type == APIType::Vulkan;
 +    for (u32 i = 0; i < (static_sampler ? 8u : 1u); ++i)
-+    {
+     {
+-      out.Write("  return iround(255.0 * texture(SAMP_USE,coords));\n");
+-    }
 +      const std::string texmap = static_sampler ? fmt::format("{}u", i) : "texmap";
 +      const std::string sampler =
 +          static_sampler ? fmt::format("sampler2DArray(tex_{}u, samp_{}u)", i, i) : "SAMP_USE";
@@ -42,7 +43,8 @@ diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommo
 +        out.Write("\nint4 sampleTexture_{}u(int2 uv, int layer) {{\n", i);
 +      else
 +        out.Write("\nint4 sampleTexture(uint texmap, SAMP_PARAM, int2 uv, int layer) {{\n");
-+
+ 
+-    out.Write("}}\n");
 +      out.Write("  float size_s = float(" I_TEXDIMS "[{}].x * 128);\n"
 +                "  float size_t = float(" I_TEXDIMS "[{}].y * 128);\n"
 +                "  float3 coords = float3(float(uv.x) / size_s, float(uv.y) / size_t, layer);\n",
@@ -60,14 +62,14 @@ diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommo
 +      }
 +      out.Write("}}\n");
 +    }
-+  }
-+  else
-+  {
+   }
+   else
+   {
 +    out.Write("\nint4 sampleTexture(uint texmap, SAMP_PARAM, int2 uv, int layer) {{\n");
      out.Write(R"(
    uint texmode0 = samp_texmode0(texmap);
    uint texmode1 = samp_texmode1(texmap);
-@@ -819,6 +834,11 @@
+@@ -819,6 +834,11 @@ uint WrapCoord(int coord, uint wrap, int size) {{
  }}
  )");
    }
@@ -79,7 +81,7 @@ diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommo
  }
  
  static void WriteStage(ShaderCode& out, const pixel_shader_uid_data* uid_data, int n,
-@@ -861,7 +881,7 @@
+@@ -861,7 +881,7 @@ ShaderCode GeneratePixelShaderCode(APIType api_type, const ShaderHostConfig& hos
    WritePixelShaderCommonHeader(out, api_type, host_config, uid_data->bounding_box);
  
    out.Write("\n#define sampleTextureWrapper(texmap, uv, layer) "
@@ -89,9 +91,10 @@ diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommo
    if (uid_data->ztest == EmulatedZ::ForcedEarly)
    {
 diff --git a/Source/Core/VideoCommon/UberShaderPixel.cpp b/Source/Core/VideoCommon/UberShaderPixel.cpp
+index 4ca3cd3fe6..ba9d9f0f15 100644
 --- a/Source/Core/VideoCommon/UberShaderPixel.cpp
 +++ b/Source/Core/VideoCommon/UberShaderPixel.cpp
-@@ -307,7 +307,7 @@
+@@ -307,7 +307,7 @@ ShaderCode GenPixelShader(APIType api_type, const ShaderHostConfig& host_config,
      // Doesn't look like DirectX supports this. Oh well the code path is here just in case it
      // supports this in the future.
      out.Write("int4 sampleTextureWrapper(uint texmap, int2 uv, int layer) {{\n");
@@ -100,7 +103,7 @@ diff --git a/Source/Core/VideoCommon/UberShaderPixel.cpp b/Source/Core/VideoComm
      out.Write("}}\n\n");
    }
    else
-@@ -320,12 +320,12 @@
+@@ -320,12 +320,12 @@ ShaderCode GenPixelShader(APIType api_type, const ShaderHostConfig& host_config,
                "  switch(sampler_num) {{\n");
      for (int i = 0; i < 8; i++)
      {

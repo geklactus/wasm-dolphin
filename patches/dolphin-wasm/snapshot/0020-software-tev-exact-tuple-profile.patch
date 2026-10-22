@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0020-software-tev-exact-tuple-profile
+
+
 diff --git a/Source/Core/VideoBackends/Software/Tev.cpp b/Source/Core/VideoBackends/Software/Tev.cpp
-index d893bafa89f92de701198ad47539ac56553cfff0..7c9ee1984e0032b886f8e1685284a19841e80178 100644
+index d893bafa89..7c9ee1984e 100644
 --- a/Source/Core/VideoBackends/Software/Tev.cpp
 +++ b/Source/Core/VideoBackends/Software/Tev.cpp
 @@ -407,6 +407,9 @@ void Tev::Draw()

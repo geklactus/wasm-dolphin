@@ -1,14 +1,14 @@
-From 2f403b5147478e19ecdda1f1d111d323b7b2beff Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: wasm-dolphin patch snapshot <snapshot@local.invalid>
-Date: Thu, 9 Jul 2026 14:42:29 -1000
-Subject: [PATCH 1/6] Browser platform and core runtime snapshot
+Date: Thu, 22 Oct 2026 14:11:13 +0000
+Subject: [PATCH] 0001-browser-platform-core
 
 
 diff --git a/Source/Core/Common/CMakeLists.txt b/Source/Core/Common/CMakeLists.txt
-index 894fd38..1fbe546 100644
+index c94c3e2da9..56c038a558 100644
 --- a/Source/Core/Common/CMakeLists.txt
 +++ b/Source/Core/Common/CMakeLists.txt
-@@ -190,10 +190,13 @@ PRIVATE
+@@ -194,10 +194,13 @@ PRIVATE
    CURL::libcurl
    FatFs
    spng::spng
@@ -23,7 +23,7 @@ index 894fd38..1fbe546 100644
  if ((DEFINED CMAKE_ANDROID_ARCH_ABI AND CMAKE_ANDROID_ARCH_ABI MATCHES "x86|x86_64") OR
      (NOT DEFINED CMAKE_ANDROID_ARCH_ABI AND _M_X86_64))
    target_link_libraries(common PRIVATE bdisasm)
-@@ -288,6 +291,13 @@ target_sources(common PRIVATE
+@@ -292,6 +295,13 @@ target_sources(common PRIVATE
    GL/GLExtensions/GLExtensions.h
  )
  
@@ -38,7 +38,7 @@ index 894fd38..1fbe546 100644
    target_sources(common PRIVATE
      GL/GLInterface/EGL.cpp
 diff --git a/Source/Core/Common/FilesystemWatcher.cpp b/Source/Core/Common/FilesystemWatcher.cpp
-index 9497023..83b7808 100644
+index 94970232b2..83b78088c1 100644
 --- a/Source/Core/Common/FilesystemWatcher.cpp
 +++ b/Source/Core/Common/FilesystemWatcher.cpp
 @@ -3,6 +3,34 @@
@@ -83,7 +83,7 @@ index 9497023..83b7808 100644
 +
 +#endif
 diff --git a/Source/Core/Common/GL/GLContext.cpp b/Source/Core/Common/GL/GLContext.cpp
-index eef6896..bb8da27 100644
+index eef689616e..bb8da27d8e 100644
 --- a/Source/Core/Common/GL/GLContext.cpp
 +++ b/Source/Core/Common/GL/GLContext.cpp
 @@ -5,6 +5,9 @@
@@ -108,7 +108,7 @@ index eef6896..bb8da27 100644
      context = std::make_unique<GLContextAGL>();
 diff --git a/Source/Core/Common/GL/GLInterface/Emscripten.cpp b/Source/Core/Common/GL/GLInterface/Emscripten.cpp
 new file mode 100644
-index 0000000..13d05a5
+index 0000000000..13d05a5d4d
 --- /dev/null
 +++ b/Source/Core/Common/GL/GLInterface/Emscripten.cpp
 @@ -0,0 +1,441 @@
@@ -555,7 +555,7 @@ index 0000000..13d05a5
 +}
 diff --git a/Source/Core/Common/GL/GLInterface/Emscripten.h b/Source/Core/Common/GL/GLInterface/Emscripten.h
 new file mode 100644
-index 0000000..7e6264c
+index 0000000000..7e6264c069
 --- /dev/null
 +++ b/Source/Core/Common/GL/GLInterface/Emscripten.h
 @@ -0,0 +1,41 @@
@@ -601,7 +601,7 @@ index 0000000..7e6264c
 +  bool m_context_created_via_direct_js = false;
 +};
 diff --git a/Source/Core/Common/MemoryUtil.cpp b/Source/Core/Common/MemoryUtil.cpp
-index 0d66890..659f9a8 100644
+index 0d66890d2b..659f9a8adb 100644
 --- a/Source/Core/Common/MemoryUtil.cpp
 +++ b/Source/Core/Common/MemoryUtil.cpp
 @@ -21,6 +21,7 @@
@@ -622,7 +622,7 @@ index 0d66890..659f9a8 100644
    system_info sysinfo;
    get_system_info(&sysinfo);
 diff --git a/Source/Core/Common/Thread.cpp b/Source/Core/Common/Thread.cpp
-index 258559b..2efd1a4 100644
+index d9a40fc6b5..8672d36812 100644
 --- a/Source/Core/Common/Thread.cpp
 +++ b/Source/Core/Common/Thread.cpp
 @@ -170,6 +170,8 @@ void SetCurrentThreadName(const char* name)
@@ -635,7 +635,7 @@ index 258559b..2efd1a4 100644
    pthread_set_name_np(pthread_self(), name);
  #elif defined(__NetBSD__)
 diff --git a/Source/Core/Common/Timer.cpp b/Source/Core/Common/Timer.cpp
-index 9570734..f570a55 100644
+index fcbbd7bbd2..50cd996517 100644
 --- a/Source/Core/Common/Timer.cpp
 +++ b/Source/Core/Common/Timer.cpp
 @@ -179,6 +179,9 @@ void PrecisionTimer::SleepUntil(Clock::time_point target)
@@ -658,7 +658,7 @@ index 9570734..f570a55 100644
  #elif defined(__APPLE__)
        CLOCK_UPTIME_RAW;
 diff --git a/Source/Core/Core/Boot/Boot.cpp b/Source/Core/Core/Boot/Boot.cpp
-index 2ddadfe..f865292 100644
+index e6ce8accfd..0565a131d0 100644
 --- a/Source/Core/Core/Boot/Boot.cpp
 +++ b/Source/Core/Core/Boot/Boot.cpp
 @@ -61,6 +61,10 @@
@@ -672,7 +672,7 @@ index 2ddadfe..f865292 100644
  static std::vector<std::string> ReadM3UFile(const std::string& m3u_path,
                                              const std::string& folder_path)
  {
-@@ -499,6 +503,7 @@ static void CopyDefaultExceptionHandlers(Core::System& system)
+@@ -504,6 +508,7 @@ static void CopyDefaultExceptionHandlers(Core::System& system)
  bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
                     std::unique_ptr<BootParameters> boot)
  {
@@ -680,7 +680,7 @@ index 2ddadfe..f865292 100644
    SConfig& config = SConfig::GetInstance();
  
    // Triforce systems are region free and always must use the NTSC video mode
-@@ -521,18 +526,24 @@ bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
+@@ -526,18 +531,24 @@ bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
      }
      bool operator()(BootParameters::Disc& disc) const
      {
@@ -705,7 +705,7 @@ index 2ddadfe..f865292 100644
        return true;
      }
  
-@@ -675,8 +686,10 @@ bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
+@@ -680,8 +691,10 @@ bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
    if (!std::visit(BootTitle(system, guard, boot->riivolution_patches), boot->parameters))
      return false;
  
@@ -717,7 +717,7 @@ index 2ddadfe..f865292 100644
  }
  
 diff --git a/Source/Core/Core/Boot/Boot_BS2Emu.cpp b/Source/Core/Core/Boot/Boot_BS2Emu.cpp
-index a44796d..6f18ed5 100644
+index a44796dd4f..6f18ed585a 100644
 --- a/Source/Core/Core/Boot/Boot_BS2Emu.cpp
 +++ b/Source/Core/Core/Boot/Boot_BS2Emu.cpp
 @@ -44,6 +44,14 @@
@@ -859,10 +859,10 @@ index a44796d..6f18ed5 100644
    auto& memory = system.GetMemory();
    bool streaming = memory.Read_U8(0x80000008);
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index e411239..2cb97af 100644
+index 56c8dba3de..26bd330a3f 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -683,6 +683,10 @@ PUBLIC
+@@ -695,6 +695,10 @@ PUBLIC
    videonull
    videoogl
    videosoftware
@@ -873,7 +873,7 @@ index e411239..2cb97af 100644
  
  PRIVATE
    FatFs
-@@ -772,7 +776,7 @@ elseif(APPLE)
+@@ -784,7 +788,7 @@ elseif(APPLE)
      HW/EXI/BBA/TAP_Apple.cpp
    )
    target_link_libraries(core PUBLIC ${IOB_LIBRARY})
@@ -882,7 +882,7 @@ index e411239..2cb97af 100644
    target_sources(core PRIVATE
      HW/EXI/BBA/TAP_Unix.cpp
    )
-@@ -820,7 +824,7 @@ if(TARGET Hidapi::Hidapi)
+@@ -832,7 +836,7 @@ if(TARGET Hidapi::Hidapi)
    target_compile_definitions(core PRIVATE -DHAVE_HIDAPI=1)
  endif()
  
@@ -891,7 +891,7 @@ index e411239..2cb97af 100644
    target_sources(core PRIVATE
      MemoryWatcher.cpp
      MemoryWatcher.h
-@@ -845,3 +849,96 @@ if(USE_RETRO_ACHIEVEMENTS)
+@@ -857,3 +861,96 @@ if(USE_RETRO_ACHIEVEMENTS)
      target_compile_definitions(core PUBLIC -DRC_CLIENT_SUPPORTS_RAINTEGRATION)
    endif()
  endif()
@@ -989,7 +989,7 @@ index e411239..2cb97af 100644
 +  )
 +endif()
 diff --git a/Source/Core/Core/Core.cpp b/Source/Core/Core/Core.cpp
-index cebcc74..9918a19 100644
+index fc614fd24c..4a25ae85f7 100644
 --- a/Source/Core/Core/Core.cpp
 +++ b/Source/Core/Core/Core.cpp
 @@ -16,6 +16,12 @@
@@ -1313,7 +1313,7 @@ index cebcc74..9918a19 100644
    return true;
  }
  
-@@ -323,6 +607,8 @@ static void CPUSetInitialExecutionState(Core::System& system, bool force_paused
+@@ -321,6 +605,8 @@ static void CPUSetInitialExecutionState(Core::System& system, bool force_paused
  static void CpuThread(Core::System& system, const std::optional<std::string>& savestate_path,
                        bool delete_savestate)
  {
@@ -1322,7 +1322,7 @@ index cebcc74..9918a19 100644
    if (system.IsDualCoreMode())
      Common::SetCurrentThreadName("CPU thread");
    else
-@@ -384,7 +670,9 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
+@@ -382,7 +668,9 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
    }
  
    // Enter CPU run loop. When we leave it - we are done.
@@ -1332,7 +1332,7 @@ index cebcc74..9918a19 100644
  
  #ifdef USE_MEMORYWATCHER
    s_memory_watcher.reset();
-@@ -469,7 +757,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
+@@ -466,7 +754,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
      std::promise<bool> init_from_thread;
  
      // Spawn the GPU thread.
@@ -1341,7 +1341,7 @@ index cebcc74..9918a19 100644
        Common::SetCurrentThreadName("Video thread");
  
        const bool is_init = init_video();
-@@ -482,7 +770,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
+@@ -479,7 +767,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
        INFO_LOG_FMT(CONSOLE, "{}", StopMessage(false, "Video Loop Ended"));
  
        deinit_video();
@@ -1350,7 +1350,7 @@ index cebcc74..9918a19 100644
  
      if (init_from_thread.get_future().get())
      {
-@@ -512,6 +800,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
+@@ -509,6 +797,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
  static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
                        WindowSystemInfo wsi)
  {
@@ -1358,7 +1358,7 @@ index cebcc74..9918a19 100644
    NotifyStateChanged(State::Starting);
    Common::ScopeGuard flag_guard{[] {
      {
-@@ -536,9 +825,11 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -533,9 +822,11 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
  
    // Switch the window used for inputs to the render window. This way, the cursor position
    // is relative to the render window, instead of the main window.
@@ -1370,7 +1370,7 @@ index cebcc74..9918a19 100644
    Pad::LoadConfig();
    Pad::LoadGBAConfig();
    Keyboard::LoadConfig();
-@@ -577,9 +868,11 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -574,9 +865,11 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
    system.GetMovie().Init(*boot);
    Common::ScopeGuard movie_guard([&system] { system.GetMovie().Shutdown(); });
  
@@ -1382,7 +1382,7 @@ index cebcc74..9918a19 100644
    HW::Init(system,
             NetPlay::IsNetPlayRunning() ? &(boot_session_data.GetNetplaySettings()->sram) : nullptr);
  
-@@ -607,6 +900,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -604,6 +897,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
      PanicAlertFmt("Failed to initialize video backend!");
      return;
    }
@@ -1390,7 +1390,7 @@ index cebcc74..9918a19 100644
  
    if (cpu_info.HTT)
      Config::SetBaseOrCurrent(Config::MAIN_DSP_THREAD, cpu_info.num_cores > 4);
-@@ -619,6 +913,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -616,6 +910,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
      PanicAlertFmt("Failed to initialize DSP emulation!");
      return;
    }
@@ -1398,7 +1398,7 @@ index cebcc74..9918a19 100644
  
    AudioCommon::PostInitSoundStream(system);
  
-@@ -639,8 +934,10 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -636,8 +931,10 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
    {
      ASSERT(IsCPUThread());
      CPUThreadGuard guard(system);
@@ -1409,7 +1409,7 @@ index cebcc74..9918a19 100644
    }
  
    // Initialise Wii filesystem contents.
-@@ -656,6 +953,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -653,6 +950,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
      wiifs_guard.Dismiss();
  
    // This adds the SyncGPU handler to CoreTiming, so now CoreTiming::Advance might block.
@@ -1417,7 +1417,7 @@ index cebcc74..9918a19 100644
    system.GetFifo().Prepare();
  
    const Common::EventHook frame_presented =
-@@ -674,6 +972,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
+@@ -671,6 +969,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
    UpdateTitle(system);
  
    // Become the CPU thread.
@@ -1426,7 +1426,7 @@ index cebcc74..9918a19 100644
  }
  
 diff --git a/Source/Core/Core/CoreTiming.cpp b/Source/Core/Core/CoreTiming.cpp
-index 1fa39d7..fad0e6e 100644
+index 1fa39d7448..fad0e6e9d4 100644
 --- a/Source/Core/Core/CoreTiming.cpp
 +++ b/Source/Core/Core/CoreTiming.cpp
 @@ -21,10 +21,18 @@
@@ -1571,7 +1571,7 @@ index 1fa39d7..fad0e6e 100644
        m_precision_cpu_timer.SleepUntil(time_point);
      else
 diff --git a/Source/Core/Core/HW/DVD/AMMediaboard.cpp b/Source/Core/Core/HW/DVD/AMMediaboard.cpp
-index e20698e..a6718bc 100644
+index 272e5a12ff..e7c47ca68d 100644
 --- a/Source/Core/Core/HW/DVD/AMMediaboard.cpp
 +++ b/Source/Core/Core/HW/DVD/AMMediaboard.cpp
 @@ -3,6 +3,94 @@
@@ -1669,14 +1669,14 @@ index e20698e..a6718bc 100644
  #include <algorithm>
  #include <bit>
  #include <random>
-@@ -2422,3 +2510,5 @@ s32 DebuggerGetSocket(u32 triforce_fd)
+@@ -2432,3 +2520,5 @@ s32 DebuggerGetSocket(u32 triforce_fd)
    return -1;
  }
  }  // namespace AMMediaboard
 +
 +#endif
 diff --git a/Source/Core/Core/HW/EXI/BBA/TAPServerConnection.cpp b/Source/Core/Core/HW/EXI/BBA/TAPServerConnection.cpp
-index d70e3ea..9f7fddb 100644
+index 3bef36ad77..6e5efc7f3c 100644
 --- a/Source/Core/Core/HW/EXI/BBA/TAPServerConnection.cpp
 +++ b/Source/Core/Core/HW/EXI/BBA/TAPServerConnection.cpp
 @@ -1,6 +1,72 @@
@@ -1752,14 +1752,14 @@ index d70e3ea..9f7fddb 100644
  #include <cstdlib>
  #include <cstring>
  #include <optional>
-@@ -357,3 +423,5 @@ void TAPServerConnection::ReadThreadHandler()
+@@ -358,3 +424,5 @@ void TAPServerConnection::ReadThreadHandler()
  }
  
  }  // namespace ExpansionInterface
 +
 +#endif
 diff --git a/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.cpp b/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.cpp
-index c49c6e3..3dbf3e2 100644
+index f1aa756fa7..dc2646c8f6 100644
 --- a/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.cpp
 +++ b/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.cpp
 @@ -22,6 +22,40 @@
@@ -1804,7 +1804,7 @@ index c49c6e3..3dbf3e2 100644
  // Multiple parts of this implementation depend on Dolphin
  // being compiled for a little endian host.
 diff --git a/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.h b/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.h
-index 00d0fcb..d0576f2 100644
+index 59fabfafd1..44d057f6d4 100644
 --- a/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.h
 +++ b/Source/Core/Core/HW/EXI/EXI_DeviceEthernet.h
 @@ -347,8 +347,8 @@ private:
@@ -1851,7 +1851,7 @@ index 00d0fcb..d0576f2 100644
      std::thread m_read_thread;
      Common::Flag m_read_enabled;
 diff --git a/Source/Core/Core/HW/EXI/EXI_DeviceMemoryCard.cpp b/Source/Core/Core/HW/EXI/EXI_DeviceMemoryCard.cpp
-index 73ff1d6..7cddbee 100644
+index 73ff1d616c..7cddbee872 100644
 --- a/Source/Core/Core/HW/EXI/EXI_DeviceMemoryCard.cpp
 +++ b/Source/Core/Core/HW/EXI/EXI_DeviceMemoryCard.cpp
 @@ -45,8 +45,10 @@ namespace ExpansionInterface
@@ -1915,7 +1915,7 @@ index 73ff1d6..7cddbee 100644
  }
  }  // namespace ExpansionInterface
 diff --git a/Source/Core/Core/HW/GCPad.cpp b/Source/Core/Core/HW/GCPad.cpp
-index 188882c..0673f91 100644
+index 188882c58a..0673f91cac 100644
 --- a/Source/Core/Core/HW/GCPad.cpp
 +++ b/Source/Core/Core/HW/GCPad.cpp
 @@ -12,6 +12,11 @@
@@ -1943,104 +1943,8 @@ index 188882c..0673f91 100644
    return static_cast<GCPad*>(s_config.GetController(pad_num))->GetInput();
  }
  
-diff --git a/Source/Core/Core/HW/Triforce/ICCardReader.cpp b/Source/Core/Core/HW/Triforce/ICCardReader.cpp
-index b438992..736a72d 100644
---- a/Source/Core/Core/HW/Triforce/ICCardReader.cpp
-+++ b/Source/Core/Core/HW/Triforce/ICCardReader.cpp
-@@ -468,7 +468,7 @@ void ICCardReader::Update()
-     if (!ic_card)
-       break;
- 
--    if (!ic_card->WriteData(page, input_payload.subspan(6, PAGE_SIZE)))
-+    if (!ic_card->WriteData(page, input_payload.subspan(6, IC_CARD_PAGE_SIZE)))
-     {
-       status_code = HardwareUntestedErrorCode;
-     }
-@@ -564,7 +564,7 @@ void ICCardReader::Update()
-     if (!ic_card)
-       break;
- 
--    const u32 byte_count = page_count * PAGE_SIZE;
-+    const u32 byte_count = page_count * IC_CARD_PAGE_SIZE;
- 
-     if (!validate_input_payload_size(8 + byte_count))
-       break;
-@@ -611,8 +611,8 @@ void ICCardReader::SendReply(u8 command, u16 status_code, std::span<const u8> pa
- 
- std::span<const u8> ICCardReader::ICCard::ReadData(u16 page, u16 page_count)
- {
--  const u32 byte_offset = page * PAGE_SIZE;
--  const u32 byte_count = page_count * PAGE_SIZE;
-+  const u32 byte_offset = page * IC_CARD_PAGE_SIZE;
-+  const u32 byte_count = page_count * IC_CARD_PAGE_SIZE;
- 
-   if (byte_count + byte_offset > m_data.size())
-   {
-@@ -629,10 +629,10 @@ std::span<const u8> ICCardReader::ICCard::ReadData(u16 page, u16 page_count)
- 
- bool ICCardReader::ICCard::WriteData(u16 page, std::span<const u8> write_span)
- {
--  constexpr u32 read_only_area_begin = READ_ONLY_PAGE_INDEX * PAGE_SIZE;
--  constexpr u32 read_only_area_end = read_only_area_begin + PAGE_SIZE;
-+  constexpr u32 read_only_area_begin = READ_ONLY_PAGE_INDEX * IC_CARD_PAGE_SIZE;
-+  constexpr u32 read_only_area_end = read_only_area_begin + IC_CARD_PAGE_SIZE;
- 
--  const u32 byte_offset = page * PAGE_SIZE;
-+  const u32 byte_offset = page * IC_CARD_PAGE_SIZE;
- 
-   if ((byte_offset < read_only_area_end) &&
-       (byte_offset + write_span.size() > read_only_area_begin))
-@@ -659,7 +659,7 @@ bool ICCardReader::ICCard::WriteData(u16 page, std::span<const u8> write_span)
- 
- u16 ICCardReader::ICCard::DecreaseUseCount(u16 page, u16 amount)
- {
--  const u32 byte_offset = page * PAGE_SIZE;
-+  const u32 byte_offset = page * IC_CARD_PAGE_SIZE;
-   auto* const addr = m_data.data() + byte_offset;
- 
-   const u16 previous_use_count = Common::swap16(addr);
-@@ -728,7 +728,7 @@ void ICCardReader::ICCard::Initialize()
-   {
-     NOTICE_LOG_FMT(SERIALINTERFACE_CARD, "Creating new IC Card data.");
-     InitializeCardData(m_data);
--    FlushData(READ_ONLY_PAGE_INDEX * PAGE_SIZE, PAGE_SIZE * 2);
-+    FlushData(READ_ONLY_PAGE_INDEX * IC_CARD_PAGE_SIZE, IC_CARD_PAGE_SIZE * 2);
-   }
- }
- 
-diff --git a/Source/Core/Core/HW/Triforce/ICCardReader.h b/Source/Core/Core/HW/Triforce/ICCardReader.h
-index 7f4911c..ad8c43d 100644
---- a/Source/Core/Core/HW/Triforce/ICCardReader.h
-+++ b/Source/Core/Core/HW/Triforce/ICCardReader.h
-@@ -41,7 +41,7 @@ private:
- 
-   void SendReply(u8 command, u16 status_code, std::span<const u8> payload);
- 
--  static constexpr std::size_t PAGE_SIZE = 8;
-+  static constexpr std::size_t IC_CARD_PAGE_SIZE = 8;
-   static constexpr u32 PAGE_COUNT = 256;
- 
-   // TODO: Maybe we're supposed to error for out-of-bound pages instead?
-@@ -50,7 +50,7 @@ private:
-   class ICCard
-   {
-   public:
--    using UID = std::array<u8, PAGE_SIZE>;
-+    using UID = std::array<u8, IC_CARD_PAGE_SIZE>;
- 
-     ICCard(std::string filename, const UID& uid);
- 
-@@ -76,7 +76,7 @@ private:
-   private:
-     void FlushData(u32 byte_offset, u32 byte_count);
- 
--    std::array<u8, PAGE_SIZE * PAGE_COUNT> m_data{};
-+    std::array<u8, IC_CARD_PAGE_SIZE * PAGE_COUNT> m_data{};
- 
-     const std::string m_filename;
- 
 diff --git a/Source/Core/Core/HW/VideoInterface.cpp b/Source/Core/Core/HW/VideoInterface.cpp
-index 42e0f35..e4ada4e 100644
+index 42e0f350ba..e4ada4ef6e 100644
 --- a/Source/Core/Core/HW/VideoInterface.cpp
 +++ b/Source/Core/Core/HW/VideoInterface.cpp
 @@ -7,6 +7,10 @@
@@ -2137,10 +2041,10 @@ index 42e0f35..e4ada4e 100644
    // If this half-line is at the actual boundary of either field, schedule an SI poll to happen
    // some number of half-lines in the future
 diff --git a/Source/Core/Core/IOS/Network/Socket.h b/Source/Core/Core/IOS/Network/Socket.h
-index 4f07612..8d68c74 100644
+index 3617e244ce..97ad13134f 100644
 --- a/Source/Core/Core/IOS/Network/Socket.h
 +++ b/Source/Core/Core/IOS/Network/Socket.h
-@@ -14,14 +14,14 @@ typedef pollfd pollfd_t;
+@@ -14,8 +14,8 @@ typedef pollfd pollfd_t;
  #define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
  #define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
  
@@ -2149,36 +2053,25 @@ index 4f07612..8d68c74 100644
 +#elif defined(__EMSCRIPTEN__) or defined(__linux__) or defined(__APPLE__) or defined(__FreeBSD__) or \
 +    defined(__NetBSD__) or defined(__OpenBSD__) or defined(__HAIKU__)
  #include <arpa/inet.h>
- #include <netdb.h>
- #include <sys/ioctl.h>
- #include <sys/socket.h>
- #include <sys/types.h>
--#if defined(ANDROID) || defined(__HAIKU__)
-+#if defined(ANDROID) || defined(__HAIKU__) || defined(__EMSCRIPTEN__)
  #include <fcntl.h>
- #else
- #include <sys/fcntl.h>
+ #include <net/if.h>
 diff --git a/Source/Core/Core/IOS/USB/Emulated/Microphone.cpp b/Source/Core/Core/IOS/USB/Emulated/Microphone.cpp
-index 4a21c76..d6530b1 100644
+index fe0363c915..2a72f42c3a 100644
 --- a/Source/Core/Core/IOS/USB/Emulated/Microphone.cpp
 +++ b/Source/Core/Core/IOS/USB/Emulated/Microphone.cpp
-@@ -36,9 +36,9 @@ Microphone::Microphone(const MicrophoneState& sampler, std::string worker_name)
- {
- }
+@@ -38,6 +38,7 @@ Microphone::Microphone(const MicrophoneState& sampler, std::string worker_name)
  #else
--Microphone::Microphone(MicrophoneState sampler, std::string worker_name)
--    : m_sampler(std::move(sampler))
-+Microphone::Microphone(const MicrophoneState& sampler, std::string worker_name) : m_sampler(sampler)
+ Microphone::Microphone(const MicrophoneState& sampler, std::string worker_name) : m_sampler(sampler)
  {
 +  (void)worker_name;
  }
  #endif
  
 diff --git a/Source/Core/Core/State.cpp b/Source/Core/Core/State.cpp
-index 1d7ff9e..55abd8a 100644
+index cecda5f4e8..3eaef3a4d0 100644
 --- a/Source/Core/Core/State.cpp
 +++ b/Source/Core/Core/State.cpp
-@@ -501,6 +501,38 @@ void SaveAs(Core::System& system, std::string filename)
+@@ -505,6 +505,38 @@ void SaveAs(Core::System& system, std::string filename)
        });
  }
  
@@ -2218,10 +2111,10 @@ index 1d7ff9e..55abd8a 100644
  {
    // Just read the first block, since it will contain the full revision string
 diff --git a/Source/Core/Core/State.h b/Source/Core/Core/State.h
-index 1c4eeb0..614dd88 100644
+index cd35ea1af0..53200c7168 100644
 --- a/Source/Core/Core/State.h
 +++ b/Source/Core/Core/State.h
-@@ -97,6 +97,10 @@ void Load(Core::System& system, int slot);
+@@ -97,6 +97,10 @@ void Load(Core::System& system, u32 slot);
  
  void SaveAs(Core::System& system, std::string filename);
  void LoadAs(Core::System& system, std::string filename);
@@ -2233,7 +2126,7 @@ index 1c4eeb0..614dd88 100644
  void LoadLastSaved(Core::System& system, int i = 1);
  void SaveFirstSaved(Core::System& system);
 diff --git a/Source/Core/DiscIO/CMakeLists.txt b/Source/Core/DiscIO/CMakeLists.txt
-index bfec96d..cb13e49 100644
+index bfec96dd9d..cb13e49290 100644
 --- a/Source/Core/DiscIO/CMakeLists.txt
 +++ b/Source/Core/DiscIO/CMakeLists.txt
 @@ -70,7 +70,6 @@ add_library(discio
@@ -2288,7 +2181,7 @@ index bfec96d..cb13e49 100644
 +  )
 +endif()
 diff --git a/Source/Core/InputCommon/CMakeLists.txt b/Source/Core/InputCommon/CMakeLists.txt
-index 0e5612f..64febf2 100644
+index 5cc6b66ca6..036aa2ef9b 100644
 --- a/Source/Core/InputCommon/CMakeLists.txt
 +++ b/Source/Core/InputCommon/CMakeLists.txt
 @@ -144,7 +144,7 @@ elseif(ANDROID)
@@ -2301,7 +2194,7 @@ index 0e5612f..64febf2 100644
  endif()
  
 diff --git a/Source/Core/InputCommon/GCAdapter.cpp b/Source/Core/InputCommon/GCAdapter.cpp
-index e11d95d..e68a029 100644
+index dbffc4d81d..5d5494caa0 100644
 --- a/Source/Core/InputCommon/GCAdapter.cpp
 +++ b/Source/Core/InputCommon/GCAdapter.cpp
 @@ -3,12 +3,15 @@

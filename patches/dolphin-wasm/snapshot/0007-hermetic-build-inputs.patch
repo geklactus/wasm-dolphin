@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:30 +0000
+Subject: [PATCH] 0007-hermetic-build-inputs
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 2cb97af..82f2926 100644
+index 26bd330a3f..014e0026ba 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -862,20 +862,23 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -874,20 +874,23 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
    # wgpuDeviceCreateShaderModule. Linked here as a full-archive blob
    # so the `naga_spirv_to_wgsl` / `naga_free_wgsl` C symbols survive
    # to WebGPUShaderTranslator.cpp.
@@ -39,7 +45,7 @@ index 2cb97af..82f2926 100644
  
    # Day-14 (wasm-dolphin): enable the WebGPU scaffold backend on the
    # wasm target. HAS_WEBGPU gates both the include of WebGPU/VideoBackend.h
-@@ -903,7 +906,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -915,7 +918,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      # works in both browsers. (Memory-growth + pthread was tried and
      # produced a slow non-wasm warning plus broke ROM mount.)
      "-sALLOW_MEMORY_GROWTH=0"
@@ -48,7 +54,7 @@ index 2cb97af..82f2926 100644
      "-sFILESYSTEM=1"
      "-lworkerfs.js"
      "-lnodefs.js"
-@@ -939,6 +942,6 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -951,6 +954,6 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      # local Module object so the EM_JS compile body can hit it. See
      # patches/dolphin-wasm/SESSION-2026-05-12-DAY-7-NOTES.md.
      "--pre-js"
@@ -57,7 +63,7 @@ index 2cb97af..82f2926 100644
    )
  endif()
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-index 1c01482..5439861 100644
+index baa8630d0b..89cba88e6a 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -7381,8 +7381,11 @@ std::vector<u8> BuildWasmCachedInterpreterBlock(std::span<const PPCAnalyst::Code

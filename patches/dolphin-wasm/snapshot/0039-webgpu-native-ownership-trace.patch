@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0039-webgpu-native-ownership-trace
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 487587b191..d053935ac6 100644
+index e9e581e5cb..01a755a4a5 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -649,7 +655,7 @@ index 2a05acbb39..d14faf81ae 100644
  {
    DolphinWeb::WebGpuProducerProfile::SetEnabled(enabled != 0);
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-index 19dadf4e44..b4bac4d033 100644
+index 7230c32092..0935c196ce 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 @@ -183,6 +183,7 @@ void VertexManager::CommitBuffer(u32 num_vertices, u32 vertex_stride, u32 num_in

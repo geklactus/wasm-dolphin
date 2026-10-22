@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0023-webgpu-geometry-upload-pack
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 61002b3..17ae306 100644
+index 1d778cbf9f..f6d486de77 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,7 +18,7 @@ index 61002b3..17ae306 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index 4e8837b..ee23c1d 100644
+index 2518723698..f2a5a9f877 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 @@ -301,15 +301,20 @@ bool WebGPUCommandStream::PushDrawTest(u32 pipeline_id, u32 vertex_count)
@@ -20,23 +26,16 @@ index 4e8837b..ee23c1d 100644
  // ---- Phase A producer API ----------------------------------------
  
 -u32 WebGPUCommandStream::UploadAlloc(const void* data, size_t len, u32 align)
--{
--  if (!data || !m_upload_base || m_upload_size == 0 || len == 0 || len > m_upload_size)
--  {
--    PoisonPass();
--    return 0;
--  }
--  if (align < 4)
--    align = 4;
 +u32 WebGPUCommandStream::ReserveUpload(size_t len, u32 align)
-+{
+ {
+-  if (!data || !m_upload_base || m_upload_size == 0 || len == 0 || len > m_upload_size)
 +  if (!m_upload_base || m_upload_size == 0 || len == 0 || len > m_upload_size)
-+  {
-+    PoisonPass();
-+    return 0;
-+  }
-+  if (align < 4)
-+    align = 4;
+   {
+     PoisonPass();
+     return 0;
+   }
+   if (align < 4)
+     align = 4;
 +  if ((align & (align - 1)) != 0)
 +  {
 +    PoisonPass();
@@ -45,23 +44,18 @@ index 4e8837b..ee23c1d 100644
  
    // Convert the monotonic write position to a contiguous physical span.
    // Padding at the end is part of the reserved byte range so the consumer
-@@ -395,15 +400,81 @@ u32 WebGPUCommandStream::UploadAlloc(const void* data, size_t len, u32 align)
+@@ -395,7 +400,6 @@ u32 WebGPUCommandStream::UploadAlloc(const void* data, size_t len, u32 align)
      }
    }
  
 -  std::memcpy(m_upload_base + aligned_offset, data, len);
--  m_last_upload_write_before = m_upload_write;
-+  m_last_upload_write_before = m_upload_write;
+   m_last_upload_write_before = m_upload_write;
    m_last_upload_write_after = end;
    m_last_upload_ptr =
-       static_cast<u32>(reinterpret_cast<uintptr_t>(m_upload_base + aligned_offset));
-   m_last_upload_len = static_cast<u32>(len);
-   m_upload_write = end;
--  return m_last_upload_ptr;
--}
-+  return m_last_upload_ptr;
-+}
-+
+@@ -405,6 +409,73 @@ u32 WebGPUCommandStream::UploadAlloc(const void* data, size_t len, u32 align)
+   return m_last_upload_ptr;
+ }
+ 
 +u32 WebGPUCommandStream::UploadAlloc(const void* data, size_t len, u32 align)
 +{
 +  if (!data)
@@ -128,35 +122,24 @@ index 4e8837b..ee23c1d 100644
 +  packet.total_size = static_cast<u32>(total_size);
 +  return packet;
 +}
- 
++
  void WebGPUCommandStream::RollbackLastUpload(u32 src_heap_ptr, u32 len)
  {
-@@ -769,14 +840,17 @@ bool WebGPUCommandStream::PushEndPass()
-   return committed;
- }
- 
--bool WebGPUCommandStream::PushSubmitPresent()
--{
-+bool WebGPUCommandStream::PushSubmitPresent()
-+{
-   if (!m_header)
+   // UploadAlloc is immediately followed by its upload-record Push on the
+@@ -775,7 +846,10 @@ bool WebGPUCommandStream::PushSubmitPresent()
      return false;
--  CmdRecord rec{};
--  rec.op = static_cast<u32>(CmdOp::SubmitPresent);
+   CmdRecord rec{};
+   rec.op = static_cast<u32>(CmdOp::SubmitPresent);
 -  return Push(rec);
--}
-+  CmdRecord rec{};
-+  rec.op = static_cast<u32>(CmdOp::SubmitPresent);
 +  if (!Push(rec))
 +    return false;
 +  ++m_submit_serial;
 +  return true;
-+}
+ }
  
  bool WebGPUCommandStream::PushDestroy(u32 class_tag, u32 id)
- {
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-index f47b6bb..36ad2a0 100644
+index 69569b8558..4ffe7c21a5 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 @@ -134,7 +134,15 @@ enum class BufferUploadRole : u32
@@ -176,14 +159,10 @@ index f47b6bb..36ad2a0 100644
  };
  
  // Fixed-size record: opcode + 7 payload words (mix of f32/u32 read
-@@ -229,8 +237,14 @@ public:
-   // `data` in, and return the ABSOLUTE wasm-heap offset of the copy
-   // (what the consumer reads from for UploadBuffer/UploadTexture), or
+@@ -231,6 +239,12 @@ public:
    // 0 on failure. Offsets recycle only after the JS consumer publishes
--  // upload_read, so queued records never observe overwritten bytes.
--  u32 UploadAlloc(const void* data, size_t len, u32 align = 4);
-+  // upload_read, so queued records never observe overwritten bytes.
-+  u32 UploadAlloc(const void* data, size_t len, u32 align = 4);
+   // upload_read, so queued records never observe overwritten bytes.
+   u32 UploadAlloc(const void* data, size_t len, u32 align = 4);
 +  // Reserve one arena span and copy two source segments directly into it.
 +  // Padding before/after the second segment is zeroed so the packet is valid
 +  // for one queue.writeBuffer without a temporary allocation.
@@ -193,13 +172,10 @@ index f47b6bb..36ad2a0 100644
  
    u32 PushCreateBuffer(u32 size, u32 usage_flags);
    bool PushUploadBuffer(u32 id, u32 dst_offset, u32 src_heap_ptr, u32 len,
-@@ -271,8 +285,16 @@ public:
- 
+@@ -272,6 +286,14 @@ public:
    // Discard the current staged pass without publishing BEGIN_PASS or any of
    // its state/draw records. Safe to call redundantly.
--  void AbortPass();
--  bool pass_staging() const { return m_pass_staging; }
-+  void AbortPass();
+   void AbortPass();
 +  // Reject the owning/following transaction when a producer-side invariant
 +  // fails before it can emit a required resource record.
 +  void FailRequiredPublication() { PoisonPass(); }
@@ -208,54 +184,37 @@ index f47b6bb..36ad2a0 100644
 +    RollbackLastUpload(src_heap_ptr, len);
 +    PoisonPass();
 +  }
-+  bool pass_staging() const { return m_pass_staging; }
+   bool pass_staging() const { return m_pass_staging; }
    bool pass_poisoned() const { return m_pass_poisoned; }
  
-   u64 GetBatchAbortCount() const
-@@ -283,10 +305,13 @@ public:
-   {
-     return m_batch_oversize_count.load(std::memory_order_relaxed);
-   }
--  u64 GetUploadTimeoutCount() const
-+  u64 GetUploadTimeoutCount() const
+@@ -287,6 +309,9 @@ public:
    {
      return m_upload_timeout_count.load(std::memory_order_relaxed);
--  }
-+  }
+   }
 +  // Successful publication of SUBMIT_PRESENT is a FIFO reuse barrier: the
 +  // consumer submits all earlier encoded draws before replaying later uploads.
 +  u64 GetSubmitSerial() const { return m_submit_serial; }
  
    bool ready() const { return m_header != nullptr; }
  
-@@ -298,9 +323,10 @@ public:
- 
- private:
-   bool StagePassRecord(const CmdRecord& rec);
--  void PoisonPass();
--  void ResetPassStaging();
--  void RollbackLastUpload(u32 src_heap_ptr, u32 len);
-+  void PoisonPass();
-+  void ResetPassStaging();
-+  void RollbackLastUpload(u32 src_heap_ptr, u32 len);
+@@ -301,6 +326,7 @@ private:
+   void PoisonPass();
+   void ResetPassStaging();
+   void RollbackLastUpload(u32 src_heap_ptr, u32 len);
 +  u32 ReserveUpload(size_t len, u32 align);
  
    CmdRingHeader* m_header = nullptr;
    CmdRecord* m_slots = nullptr;
-@@ -316,8 +342,9 @@ private:
-   std::atomic<u64> m_upload_timeout_count{0};
-   u32 m_last_upload_write_before = 0;
+@@ -318,6 +344,7 @@ private:
    u32 m_last_upload_write_after = 0;
--  u32 m_last_upload_ptr = 0;
--  u32 m_last_upload_len = 0;
-+  u32 m_last_upload_ptr = 0;
-+  u32 m_last_upload_len = 0;
+   u32 m_last_upload_ptr = 0;
+   u32 m_last_upload_len = 0;
 +  u64 m_submit_serial = 0;
  
    // BEGIN_PASS..END_PASS records stay private until END_PASS can publish the
    // entire batch. Resource creation/uploads remain immediate so the consumer
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index e73f907..47aa305 100644
+index 2a37096900..558dacec42 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -61,6 +61,8 @@ std::atomic<u64> s_ubo_cache_hits[3]{};
@@ -267,11 +226,10 @@ index e73f907..47aa305 100644
  }
  
  extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuStateCacheEnabled(int enabled)
-@@ -79,6 +81,25 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuUboCacheEnabled(int mode)
-   // deliberately re-applies the setting to invalidate producer-local slices.
+@@ -80,6 +82,25 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuUboCacheEnabled(int mode)
    s_ubo_cache_epoch.fetch_add(1, std::memory_order_release);
  }
-+
+ 
 +extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuGeometryPackEnabled(int enabled)
 +{
 +  s_geometry_upload_pack_enabled.store(enabled != 0, std::memory_order_relaxed);
@@ -290,9 +248,10 @@ index e73f907..47aa305 100644
 +{
 +  return s_geometry_upload_pack_epoch.load(std::memory_order_acquire);
 +}
- 
++
  extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
  {
+   static std::string stats;
 @@ -112,7 +133,9 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
        << s_ubo_upload_calls_suppressed[2].load(std::memory_order_relaxed)
        << " usupbyte:" << s_ubo_upload_bytes_suppressed[0].load(std::memory_order_relaxed) << ","
@@ -305,27 +264,21 @@ index e73f907..47aa305 100644
    return stats.c_str();
  }
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-index afa1786..187956e 100644
+index eb5c3dc695..56d792574f 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-@@ -3,7 +3,8 @@
- 
+@@ -4,6 +4,7 @@
  #include "VideoBackends/WebGPU/WebGPUVertexManager.h"
  
--#include <cstring>
-+#include <cstring>
+ #include <cstring>
 +#include <limits>
  
  #include <emscripten/emscripten.h>
  
-@@ -16,8 +17,9 @@ namespace WebGPU
- {
- // GPUBufferUsage numeric flags (DESIGN doc): VERTEX 0x20, INDEX 0x10,
+@@ -18,6 +19,7 @@ namespace WebGPU
  // COPY_DST 0x8.
--static constexpr u32 kUsageVertex = 0x20 | 0x8;
--static constexpr u32 kUsageIndex = 0x10 | 0x8;
-+static constexpr u32 kUsageVertex = 0x20 | 0x8;
-+static constexpr u32 kUsageIndex = 0x10 | 0x8;
+ static constexpr u32 kUsageVertex = 0x20 | 0x8;
+ static constexpr u32 kUsageIndex = 0x10 | 0x8;
 +static constexpr u32 kUsageGeometry = 0x20 | 0x10 | 0x8;
  
  VertexManager::VertexManager() = default;
@@ -339,36 +292,19 @@ index afa1786..187956e 100644
  {
    WebGPUCommandStream& cs = GetCommandStream();
    cs.EnsureRing();
-@@ -44,20 +46,143 @@ void VertexManager::EnsureBuffers()
-     m_index_buffer_id = cs.PushCreateBuffer(kIndexBufferSize, kUsageIndex);
- }
+@@ -50,13 +52,136 @@ void VertexManager::CommitBuffer(u32 num_vertices, u32 vertex_stride, u32 num_in
+   *out_base_vertex = 0;
+   *out_base_index = 0;
  
--void VertexManager::CommitBuffer(u32 num_vertices, u32 vertex_stride, u32 num_indices,
--                                 u32* out_base_vertex, u32* out_base_index)
--{
--  *out_base_vertex = 0;
--  *out_base_index = 0;
--
 -  EnsureBuffers();
--  WebGPUCommandStream& cs = GetCommandStream();
+   WebGPUCommandStream& cs = GetCommandStream();
 -  if (m_vertex_buffer_id == 0 || m_index_buffer_id == 0)
--    return;
--
--  if (vertex_stride == 0)
--    return;
--  // queue.writeBuffer requires the destination offset AND the byte
-+void VertexManager::CommitBuffer(u32 num_vertices, u32 vertex_stride, u32 num_indices,
-+                                 u32* out_base_vertex, u32* out_base_index)
-+{
-+  *out_base_vertex = 0;
-+  *out_base_index = 0;
-+
-+  WebGPUCommandStream& cs = GetCommandStream();
 +  cs.EnsureRing();
 +  if (!cs.ready())
-+    return;
-+  if (vertex_stride == 0)
-+    return;
+     return;
+-
+   if (vertex_stride == 0)
+     return;
 +
 +  const bool geometry_pack_enabled = IsGeometryUploadPackEnabled();
 +  const u64 geometry_pack_epoch = GetGeometryUploadPackEpoch();
@@ -493,33 +429,17 @@ index afa1786..187956e 100644
 +  if (m_vertex_buffer_id == 0 || m_index_buffer_id == 0)
 +    return;
 +
-+  // queue.writeBuffer requires the destination offset AND the byte
+   // queue.writeBuffer requires the destination offset AND the byte
    // count to be multiples of 4. Vertex stride is always 4-aligned
    // (OGLNativeVertexFormat panics otherwise) so a stride-aligned
-   // vertex offset is 4-aligned; round the index region + both upload
-@@ -124,8 +249,8 @@ void VertexManager::CommitBuffer(u32 num_vertices, u32 vertex_stride, u32 num_in
-   // base_vertex (mirrors the Vulkan backend). Indices likewise via
-   // first_index.
-   *out_base_vertex = voff / vertex_stride;
--  *out_base_index = ioff / static_cast<u32>(sizeof(u16));
--}
-+  *out_base_index = ioff / static_cast<u32>(sizeof(u16));
-+}
- 
- void VertexManager::UploadUtilityUniforms(const void* uniforms, u32 uniforms_size)
- {
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
-index bb67317..c688ec1 100644
+index 91ccc61203..1e4686c87c 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
-@@ -6,8 +6,11 @@
- #include "Common/CommonTypes.h"
- #include "VideoCommon/VertexManagerBase.h"
+@@ -8,6 +8,9 @@
  
--namespace WebGPU
--{
-+namespace WebGPU
-+{
+ namespace WebGPU
+ {
 +bool IsGeometryUploadPackEnabled();
 +u64 GetGeometryUploadPackEpoch();
 +
@@ -551,15 +471,10 @@ index bb67317..c688ec1 100644
  
    // Persistent GPU buffers (bridge ids; 0 until created). Large
    // ring-rolled regions — the consumer is ~1 frame behind and a
-@@ -61,7 +70,20 @@ private:
-   u32 m_index_offset = 0;   // rolling byte offset into the GPU ibuf
- 
+@@ -63,5 +72,18 @@ private:
    // Last committed batch placement (consumed by DrawCurrentBatch).
--  u32 m_last_vertex_byte = 0;
--  u32 m_last_index_byte = 0;
--};
-+  u32 m_last_vertex_byte = 0;
-+  u32 m_last_index_byte = 0;
+   u32 m_last_vertex_byte = 0;
+   u32 m_last_index_byte = 0;
 +
 +  // Default-off packed path. Destination bytes may be reused only after a
 +  // successfully published SUBMIT_PRESENT record. If one frame exhausts a
@@ -573,6 +488,5 @@ index bb67317..c688ec1 100644
 +  u64 m_geometry_submit_serial = 0;
 +  u64 m_geometry_pack_epoch = 0;
 +  bool m_geometry_pack_active = false;
-+};
+ };
  }  // namespace WebGPU
-

@@ -1,4 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:35 +0000
+Subject: [PATCH] 0047-cached-interpreter-fast-branch-inline
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index e157dcfa7d..c9dd9eddb3 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -51,6 +51,20 @@
@@ -22,7 +29,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  #ifdef __EMSCRIPTEN__
  #include <emscripten/emscripten.h>
  #include <mbedtls/sha256.h>
-@@ -9073,8 +9087,8 @@ static bool TryFastRamMultiwordLoadStore(Core::System& system, PowerPC::PowerPCS
+@@ -9065,8 +9079,8 @@ static bool TryFastRamMultiwordLoadStore(Core::System& system, PowerPC::PowerPCS
    return true;
  }
  

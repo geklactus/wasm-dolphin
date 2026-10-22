@@ -1,4 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:13 +0000
+Subject: [PATCH] 0055-wgpu-clear-rect-probe-and-subrect-experiment
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index 8a8a825c4b..8a5c9d7651 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -16,6 +16,7 @@
@@ -18,16 +25,15 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
  #include <atomic>
  #include <cstdint>
  #include <cstring>
-@@ -1230,9 +1233,56 @@
+@@ -1230,9 +1233,56 @@ void WebGPUGfx::ShowImage(const AbstractTexture* source_texture,
    m_show_image_seen = true;
  }
  
 -void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& /* target_rc */, bool color_enable,
 -                            bool alpha_enable, bool z_enable, u32 color, u32 /* z */)
--{
 +void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& target_rc, bool color_enable,
 +                            bool alpha_enable, bool z_enable, u32 color, u32 z)
-+{
+ {
 +  const u32 efb_w = g_framebuffer_manager ? g_framebuffer_manager->GetEFBWidth() : 0;
 +  const u32 efb_h = g_framebuffer_manager ? g_framebuffer_manager->GetEFBHeight() : 0;
 +  const bool covers_efb = target_rc.left <= 0 && target_rc.top <= 0 &&
@@ -78,7 +84,8 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    // Day-33 Phase C: the game's BP clear-screen. Without this the EFB
    // depth buffer is never initialised, so every drawn primitive fails
    // the depth test and only the load-cleared background shows (the
-@@ -1244,5 +1294,24 @@
+@@ -1243,6 +1293,25 @@ void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& /* target_rc */, boo
+   // render into the freshly-cleared EFB.
    if (!m_cmd_stream.ready())
      return;
 +

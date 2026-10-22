@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:33 +0000
+Subject: [PATCH] 0031-webgpu-geometry-range
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index cf8b2b4dac..0a2d06b09f 100644
+index 0ee5b9627d..c24784da1f 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -150,7 +156,7 @@ index 1a825f3367..06b952773f 100644
    bool SetRecordedPipeline(u32 pipeline_id);
    bool SetRecordedBindGroup(u32 slot, u32 bind_group_id, const u32* dynamic_offsets = nullptr,
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-index c79a3c9370..fee9fcf67c 100644
+index a90b234a9a..f0c661f42d 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 @@ -3,6 +3,7 @@
@@ -378,7 +384,9 @@ index c79a3c9370..fee9fcf67c 100644
      return;
    }
  
-@@ -366,4 +506,8 @@ struct VertexManagerTestPeer
+@@ -366,6 +506,10 @@ struct VertexManagerTestPeer
+   }
+   static u32 VertexOffset(const VertexManager& manager) { return manager.m_vertex_offset; }
    static u32 IndexOffset(const VertexManager& manager) { return manager.m_index_offset; }
 +  static u32 PendingRangeSize(const VertexManager& manager)
 +  {
@@ -387,7 +395,7 @@ index c79a3c9370..fee9fcf67c 100644
  };
  
  extern "C" EMSCRIPTEN_KEEPALIVE int RunWebGpuVertexManagerGeometryParitySmoke(int indexed,
-@@ -514,4 +658,186 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuVertexManagerGeometrySmokeE
+@@ -592,4 +736,186 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuVertexManagerGeometrySmokeE
    return s_vertex_manager_geometry_smoke_error;
  }
  

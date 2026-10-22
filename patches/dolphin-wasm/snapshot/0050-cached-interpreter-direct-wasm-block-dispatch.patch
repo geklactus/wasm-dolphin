@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:12 +0000
+Subject: [PATCH] 0050-cached-interpreter-direct-wasm-block-dispatch
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index ee99b1aa82..bb647fec77 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-@@ -50,7 +50,11 @@
- #include "Core/PowerPC/PPCTables.h"
+@@ -51,6 +51,10 @@
  #include "Core/PowerPC/PowerPC.h"
  #include "Core/System.h"
  
@@ -13,9 +19,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  #ifdef __EMSCRIPTEN__
  #ifndef DOLPHIN_WEB_INLINE_FAST_BRANCH
  #define DOLPHIN_WEB_INLINE_FAST_BRANCH 1
-@@ -59,8 +63,15 @@
- #if DOLPHIN_WEB_INLINE_FAST_BRANCH
- #define DOLPHIN_WEB_FAST_BRANCH_INLINE __attribute__((always_inline))
+@@ -61,8 +65,15 @@
  #else
  #define DOLPHIN_WEB_FAST_BRANCH_INLINE
  #endif
@@ -29,8 +33,9 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  #define DOLPHIN_WEB_FAST_BRANCH_INLINE
 +#define DOLPHIN_WEB_DIRECT_WASM_BLOCK_INLINE
  #endif
-@@ -7763,6 +7774,16 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
-     {
+ 
+ #ifdef __EMSCRIPTEN__
+@@ -7771,6 +7782,16 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
        Interpret<false>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
        normal_entry = payload + sizeof(InterpretOperands);
      }
@@ -46,7 +51,8 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +#endif
  #if DOLPHIN_WEB_HOT_DISPATCH_ORDER
      // DOLPHIN_WEB_HOT_DISPATCH_ORDER_BEGIN
-@@ -10432,9 +10453,9 @@ s32 CachedInterpreter::FastDcbxLoop(PowerPC::PowerPCState& ppc_state,
+     else if (callback == AnyCallbackCast(FastInteger))
+@@ -10438,8 +10459,8 @@ s32 CachedInterpreter::FastDcbxLoop(PowerPC::PowerPCState& ppc_state,
  }
  
  #ifdef __EMSCRIPTEN__
@@ -57,4 +63,3 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  {
    using WasmBlockFunction = int (*)(int);
  
-   ++s_wasm_block_run_count;

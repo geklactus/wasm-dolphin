@@ -1,7 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:35 +0000
+Subject: [PATCH] 0048-jit-fallback-map-diagnostics
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index c9dd9eddb3..ee99b1aa82 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-@@ -11079,7 +11079,11 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11084,7 +11084,11 @@ extern "C" const char* GetPpcWasmHelperStats()
    static u32 last_refresh_too_short_count = 0;
    static u32 last_refresh_dcbx_loop_blocks = 0;
    static u32 last_refresh_idle_poll_loop_blocks = 0;
@@ -13,7 +20,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  
    if (!stats.empty() &&
        s_wasm_block_run_count - last_refresh_block_run_count < STATS_REFRESH_BLOCK_RUNS &&
-@@ -11089,7 +11093,8 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11093,7 +11097,8 @@ extern "C" const char* GetPpcWasmHelperStats()
        s_wasm_direct_tier_reject_count == last_refresh_direct_tier_reject_count &&
        s_wasm_block_too_short_count == last_refresh_too_short_count &&
        s_fast_dcbx_loop_blocks == last_refresh_dcbx_loop_blocks &&
@@ -23,7 +30,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    {
      return stats.c_str();
    }
-@@ -11099,6 +11104,7 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11104,6 +11109,7 @@ extern "C" const char* GetPpcWasmHelperStats()
    last_refresh_too_short_count = s_wasm_block_too_short_count;
    last_refresh_dcbx_loop_blocks = s_fast_dcbx_loop_blocks;
    last_refresh_idle_poll_loop_blocks = s_fast_melee_idle_poll_loop_blocks;
@@ -31,7 +38,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  
    std::vector<std::pair<u32, u32>> hot_keys;
    hot_keys.reserve(16);
-@@ -11188,6 +11188,16 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11194,6 +11200,16 @@ extern "C" const char* GetPpcWasmHelperStats()
    out << "runloop:" << runloop_count << "slices/avg" << runloop_avg
        << "us/max" << runloop_max << "us/runOnlyMax" << runloop_runonly_max << "us"
        << "/advMax" << runloop_advance_max << "us/execMax" << runloop_exec_max << "us ";
@@ -49,9 +56,10 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
        DolphinWeb::WasmTimingProfile::CaptureWorstSlice();
    out << "sliceprof:total=" << worst_slice.total_us << ",advance=" << worst_slice.advance_us
 diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
+index 771e59f871..a60a9398f1 100644
 --- a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
 +++ b/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
-@@ -4,6 +4,7 @@
+@@ -5,6 +5,7 @@
  
  #include <algorithm>
  #include <array>
@@ -59,7 +67,7 @@ diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/
  #include <cstring>
  #include <functional>
  #include <map>
-@@ -30,6 +31,35 @@
+@@ -31,6 +32,35 @@
  
  using namespace Gen;
  
@@ -95,7 +103,7 @@ diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/
  bool JitBlock::OverlapsPhysicalRange(u32 address, u32 length) const
  {
    return physical_addresses.overlaps(address, address + length);
-@@ -250,6 +280,27 @@ const u8* JitBaseBlockCache::Dispatch()
+@@ -260,6 +290,27 @@ const u8* JitBaseBlockCache::Dispatch()
      }
    }
  
@@ -123,7 +131,7 @@ diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/
    JitBlock* block =
        m_fast_block_map_fallback[FastLookupIndexForAddress(ppc_state.pc, ppc_state.feature_flags)];
  
-@@ -259,6 +310,7 @@ const u8* JitBaseBlockCache::Dispatch()
+@@ -268,6 +319,7 @@ const u8* JitBaseBlockCache::Dispatch()
    {
      block = MoveBlockIntoFastCache(ppc_state.pc, ppc_state.feature_flags);
    }
@@ -132,9 +140,10 @@ diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/
    if (!block)
      return nullptr;
 diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.h b/Source/Core/Core/PowerPC/JitCommon/JitCache.h
+index 596f5ca604..58dfbf4278 100644
 --- a/Source/Core/Core/PowerPC/JitCommon/JitCache.h
 +++ b/Source/Core/Core/PowerPC/JitCommon/JitCache.h
-@@ -20,6 +20,18 @@
+@@ -24,6 +24,18 @@
  
  class JitBase;
  

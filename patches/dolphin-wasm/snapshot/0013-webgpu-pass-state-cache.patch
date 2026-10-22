@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:31 +0000
+Subject: [PATCH] 0013-webgpu-pass-state-cache
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index ced488d..9f9cd3e 100644
+index 014e0026ba..1697940d42 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,10 +18,10 @@ index ced488d..9f9cd3e 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index 789c492..c8691da 100644
+index 789c492b2a..56becfe779 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-@@ -11,6 +11,16 @@
+@@ -13,6 +13,16 @@
  
  namespace WebGPU
  {
@@ -32,7 +38,7 @@ index 789c492..c8691da 100644
  // Ring capacity. A complex Melee frame is hundreds of GX draws, each
  // ~SET_PIPELINE + 3×SET_BIND_GROUP + 2×SET_*_BUFFER + DRAW_INDEXED +
  // CREATE_BIND_GROUP + UBO upload — easily a few thousand records — and
-@@ -123,6 +133,7 @@ bool WebGPUCommandStream::Push(const CmdRecord& rec)
+@@ -121,6 +131,7 @@ bool WebGPUCommandStream::Push(const CmdRecord& rec)
        if (++spins >= kMaxSpins)
        {
          ++m_dropped;
@@ -40,7 +46,7 @@ index 789c492..c8691da 100644
          if (m_dropped == 1 || (m_dropped % 10000) == 0)
          {
            EM_ASM(
-@@ -467,21 +467,21 @@ void WebGPUCommandStream::PushBeginPass(u32 fb_id, float r, float g, float b, fl
+@@ -467,21 +478,21 @@ void WebGPUCommandStream::PushBeginPass(u32 fb_id, float r, float g, float b, fl
    Push(rec);
  }
  
@@ -67,7 +73,7 @@ index 789c492..c8691da 100644
    CmdRecord rec{};
    rec.op = static_cast<u32>(CmdOp::SetBindGroup);
    rec.arg.u[0] = slot;
-@@ -493,31 +493,31 @@ void WebGPUCommandStream::PushSetBindGroup(u32 slot, u32 bg_id, const u32* dyn_o
+@@ -493,31 +504,31 @@ void WebGPUCommandStream::PushSetBindGroup(u32 slot, u32 bg_id, const u32* dyn_o
    rec.arg.u[2] = num_dyn;
    for (u32 i = 0; i < num_dyn; i++)
      rec.arg.u[3 + i] = dyn_offsets[i];
@@ -107,10 +113,10 @@ index 789c492..c8691da 100644
  
  void WebGPUCommandStream::PushSetViewport(float x, float y, float w, float h, float min_d,
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-index 925f74b..9ce90bc 100644
+index 925f74b90a..2017de67ab 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-@@ -168,6 +168,10 @@ static_assert(sizeof(CmdRingHeader) == 20,
+@@ -169,6 +169,10 @@ struct CmdRingHeader
  static_assert(sizeof(CmdRingHeader) == 20,
                "CmdRingHeader must stay 20 bytes (JS bridge assumes fixed layout)");
  
@@ -121,7 +127,7 @@ index 925f74b..9ce90bc 100644
  class WebGPUCommandStream
  {
  public:
-@@ -223,14 +223,14 @@ public:
+@@ -223,14 +227,14 @@ public:
  
    void PushBeginPass(u32 fb_id, float r, float g, float b, float a, u32 load_op,
                       u32 depth_fb_id);
@@ -141,7 +147,7 @@ index 925f74b..9ce90bc 100644
    void PushSetScissor(u32 x, u32 y, u32 w, u32 h);
    void PushDraw(u32 vtx_count, u32 inst_count, u32 first_vtx);
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 461c93e..3192f48 100644
+index 461c93ed72..6a536c6b52 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -33,8 +33,11 @@
@@ -195,7 +201,7 @@ index 461c93e..3192f48 100644
  // Day-18: WebGPUGfx is a "SWGfx without a GL window". CreateTexture /
  // CreateFramebuffer return Software's classes (SWTexture / SWFramebuffer)
  // so the Software rasteriser's `static_cast<SWTexture*>(...)` calls work
-@@ -750,12 +781,111 @@ void WebGPUGfx::SetScissorRect(const MathUtil::Rectangle<int>& rc)
+@@ -750,12 +785,111 @@ void WebGPUGfx::SetScissorRect(const MathUtil::Rectangle<int>& rc)
  static constexpr u32 kUsageUniform = 0x40 | 0x8;
  static constexpr u32 kUsageStorage = 0x80 | 0x8;
  
@@ -307,7 +313,7 @@ index 461c93e..3192f48 100644
    }
  }
  
-@@ -767,12 +888,12 @@ void WebGPUGfx::BeginPassIfNeeded()
+@@ -767,12 +901,12 @@ void WebGPUGfx::BeginPassIfNeeded()
                               m_clear_col[3], m_pending_clear ? 1u : 0u, m_fb_depth_id);
    m_pending_clear = false;
    m_pass_open = true;
@@ -321,7 +327,7 @@ index 461c93e..3192f48 100644
  }
  
  static void PutBgU32(std::vector<u8>& b, u32 v)
-@@ -783,7 +904,7 @@ static void PutBgU32(std::vector<u8>& b, u32 v)
+@@ -783,7 +917,7 @@ static void PutBgU32(std::vector<u8>& b, u32 v)
    b.push_back(static_cast<u8>(v >> 24));
  }
  
@@ -330,7 +336,7 @@ index 461c93e..3192f48 100644
  {
    auto& system = Core::System::GetInstance();
  
-@@ -800,6 +921,8 @@ void WebGPUGfx::PrepareDrawResources()
+@@ -800,6 +934,8 @@ void WebGPUGfx::PrepareDrawResources()
      // fixed group-1 layout is always satisfiable for unbound slots.
      m_dummy_tex = m_cmd_stream.PushCreateTexture(1, 1, 0, 1u | 2u | 4u | 0x10u);
    }
@@ -339,7 +345,7 @@ index 461c93e..3192f48 100644
  
    auto& vsm = system.GetVertexShaderManager();
    {
-@@ -1015,7 +1138,8 @@ void WebGPUGfx::PrepareDrawResources()
+@@ -1015,7 +1151,8 @@ void WebGPUGfx::PrepareDrawResources()
        }
      }
  #endif
@@ -349,7 +355,7 @@ index 461c93e..3192f48 100644
    }
  
    // Bind group 1 — samplers (b0..7 textures, b8 sampler). Rebuild
-@@ -1063,8 +1187,8 @@ void WebGPUGfx::PrepareDrawResources()
+@@ -1063,8 +1200,8 @@ void WebGPUGfx::PrepareDrawResources()
        bg1_id = id;
      }
    }
@@ -360,7 +366,7 @@ index 461c93e..3192f48 100644
  
    // Bind group 2 — bbox SSBO (b0). Fixed ⇒ build once, reuse.
    if (m_bg2_id == 0)
-@@ -1080,8 +1204,9 @@ void WebGPUGfx::PrepareDrawResources()
+@@ -1080,8 +1217,9 @@ void WebGPUGfx::PrepareDrawResources()
      PutBgU32(b, 0);
      m_bg2_id = m_cmd_stream.PushCreateBindGroup(b.data(), b.size(), 2);
    }
@@ -372,7 +378,7 @@ index 461c93e..3192f48 100644
  }
  
  void WebGPUGfx::SetPipeline(const AbstractPipeline* pipeline)
-@@ -1233,13 +1358,24 @@ void WebGPUGfx::Draw(u32 base_vertex, u32 num_vertices)
+@@ -1233,13 +1371,24 @@ void WebGPUGfx::Draw(u32 base_vertex, u32 num_vertices)
    BeginPassIfNeeded();
    if (m_last_set_pipeline_id != m_cur_pipeline_id)
    {
@@ -402,7 +408,7 @@ index 461c93e..3192f48 100644
    m_cmd_stream.PushDraw(num_vertices, 1, base_vertex);
    // Utility draw consumed — revert to the GX bg0 for following draws.
    m_util_uniform_mode = false;
-@@ -1255,18 +1391,29 @@ void WebGPUGfx::DrawIndexed(u32 base_index, u32 num_indices, u32 base_vertex)
+@@ -1255,18 +1404,29 @@ void WebGPUGfx::DrawIndexed(u32 base_index, u32 num_indices, u32 base_vertex)
    BeginPassIfNeeded();
    if (m_last_set_pipeline_id != m_cur_pipeline_id)
    {
@@ -438,7 +444,7 @@ index 461c93e..3192f48 100644
    // Utility draw consumed — revert to the GX bg0 for following draws.
    m_util_uniform_mode = false;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 0c98aff..06dba16 100644
+index 0c98aff8ac..06dba16fcf 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -163,9 +163,15 @@ private:

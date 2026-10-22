@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:33 +0000
+Subject: [PATCH] 0030-webgpu-vertex-manager-geometry-smokes
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index a7d0d7f..0e785ef 100644
+index a7d0d7f492..0e785ef710 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 @@ -1078,39 +1078,64 @@ WebGPUCommandStream& GetCommandStream()
@@ -97,10 +103,8 @@ index a7d0d7f..0e785ef 100644
  
  namespace
  {
-warning: in the working copy of 'C:\Users\DOUGLA~1\AppData\Local\Temp\wgpu-live-vm-before\WebGPUCommandStream.cpp', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'vendor\dolphin\Source\Core\VideoBackends\WebGPU\WebGPUCommandStream.cpp', LF will be replaced by CRLF the next time Git touches it
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-index d5c05b4..bb78f36 100644
+index d5c05b447a..bb78f36634 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 @@ -432,6 +432,20 @@ private:
@@ -124,10 +128,8 @@ index d5c05b4..bb78f36 100644
  // Native wasm regression seams. These execute the real command-stream upload,
  // publication, pass-staging, and rollback methods against an isolated tiny
  // ring; they do not require a browser GPU device or mutate the live stream.
-warning: in the working copy of 'C:\Users\DOUGLA~1\AppData\Local\Temp\wgpu-live-vm-before\WebGPUCommandStream.h', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'vendor\dolphin\Source\Core\VideoBackends\WebGPU\WebGPUCommandStream.h', LF will be replaced by CRLF the next time Git touches it
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-index 56d7925..c79a3c9 100644
+index 56d792574f..a90b234a9a 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 @@ -4,6 +4,7 @@
@@ -483,10 +485,8 @@ index 56d7925..c79a3c9 100644
 +}
 +
  }  // namespace WebGPU
-warning: in the working copy of 'C:\Users\DOUGLA~1\AppData\Local\Temp\wgpu-live-vm-before\WebGPUVertexManager.cpp', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'vendor\dolphin\Source\Core\VideoBackends\WebGPU\WebGPUVertexManager.cpp', LF will be replaced by CRLF the next time Git touches it
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
-index 0cb2ee3..f905f71 100644
+index 0cb2ee3674..f905f71347 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
 @@ -57,6 +57,8 @@ protected:
@@ -510,5 +510,3 @@ index 0cb2ee3..f905f71 100644
 +extern "C" int RunWebGpuVertexManagerGeometryLifecycleSmoke();
 +extern "C" const char* GetWebGpuVertexManagerGeometrySmokeError();
  }  // namespace WebGPU
-warning: in the working copy of 'C:\Users\DOUGLA~1\AppData\Local\Temp\wgpu-live-vm-before\WebGPUVertexManager.h', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'vendor\dolphin\Source\Core\VideoBackends\WebGPU\WebGPUVertexManager.h', LF will be replaced by CRLF the next time Git touches it

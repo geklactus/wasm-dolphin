@@ -1,12 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0034-wgpu-idle-fifo-tail-elision
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
+index 9e2570649d..6f01e979cb 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -936,2 +936,2 @@ if(EMSCRIPTEN)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+     "-sSTACK_SIZE=5242880"
+     "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
+     "-sPTHREAD_POOL_SIZE=16"
 -    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuProducerProfileEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
 +    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuProducerProfileEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
      "-sEXPORTED_RUNTIME_METHODS=['FS','ccall','cwrap','UTF8ToString','HEAPU8','PThread']"
+     # Day-7 persistent JIT cache: this pre-js installs a pthread-side
+     # message receiver for "dolphin-jit-cache" payloads. Each pthread
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index 63cab04bbf..c7e798c8eb 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+@@ -32,6 +32,7 @@
+ #include "VideoCommon/VertexShaderGen.h"
+ #include "VideoCommon/VideoConfig.h"
+ #include "VideoCommon/WasmWebGpuProducerProfile.h"
++#include "VideoCommon/WasmWgpuIdleFifoTailGate.h"
+ 
+ #include <algorithm>
+ #include <atomic>
+@@ -125,6 +126,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuProducerProfileEnabled(int enabled
+   DolphinWeb::WebGpuProducerProfile::SetEnabled(enabled != 0);
+ }
+ 
++extern "C" EMSCRIPTEN_KEEPALIVE void SetWgpuIdleFifoTailElisionEnabled(int enabled)
++{
++  DolphinWeb::WgpuIdleFifoTailGate::SetEnabled(enabled != 0);
++}
++
+ bool IsGeometryUploadPackEnabled()
+ {
+   return s_geometry_upload_pack_enabled.load(std::memory_order_relaxed);
+@@ -296,6 +302,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
+     return DolphinWeb::WebGpuProducerProfile::GetCounters(phase).sampled_max_ns.load(
+         std::memory_order_relaxed);
+   });
++  const auto& tail = DolphinWeb::WgpuIdleFifoTailGate::GetCounters();
++  out << " wgtail:1," << (DolphinWeb::WgpuIdleFifoTailGate::IsEnabled() ? 1 : 0) << ","
++      << DolphinWeb::WgpuIdleFifoTailGate::GetEpoch() << ","
++      << DolphinWeb::WgpuIdleFifoTailGate::SAMPLE_PERIOD << ","
++      << tail.sampled_payloads.load(std::memory_order_relaxed) << ","
++      << tail.flush_needed.load(std::memory_order_relaxed) << ","
++      << tail.refresh_needed.load(std::memory_order_relaxed) << ","
++      << tail.both_clean.load(std::memory_order_relaxed) << ","
++      << tail.dirty_at_skip.load(std::memory_order_relaxed);
+   stats = out.str();
+   return stats.c_str();
+ }
+diff --git a/Source/Core/VideoCommon/Fifo.cpp b/Source/Core/VideoCommon/Fifo.cpp
+index d0b5aab490..7e059c2f3d 100644
+--- a/Source/Core/VideoCommon/Fifo.cpp
++++ b/Source/Core/VideoCommon/Fifo.cpp
+@@ -32,6 +32,7 @@
+ #include "VideoCommon/VertexManagerBase.h"
+ #include "VideoCommon/VideoBackendBase.h"
+ #include "VideoCommon/WasmWebGpuProducerProfile.h"
++#include "VideoCommon/WasmWgpuIdleFifoTailGate.h"
+ 
+ #ifdef __EMSCRIPTEN__
+ #include <emscripten/emscripten.h>
+@@ -479,12 +480,37 @@ void FifoManager::RunGpuLoop()
+ 
+           // The fifo is empty and it's unlikely we will get any more work in the near future.
+           // Make sure VertexManager finishes drawing any primitives it has stored in it's buffer.
++          if (!DolphinWeb::WgpuIdleFifoTailGate::IsEnabled())
+           {
++            // Default-off is the exact upstream behavior. Keep both calls
++            // unconditional so the experiment has a clean rollback path.
+             DolphinWeb::WebGpuProducerProfile::ScopedSample producer_profile(
+                 DolphinWeb::WebGpuProducerProfile::Phase::FifoTailFlush);
+             g_vertex_manager->Flush();
+             g_framebuffer_manager->RefreshPeekCache();
+           }
++          else
++          {
++            // The enabled experiment mirrors the early-return predicates in
++            // Flush and RefreshPeekCache. Do not infer dirtiness from whether
++            // this payload happened to decode a FIFO gather chunk.
++            const bool flush_needed = g_vertex_manager->NeedsFlush();
++            const bool refresh_needed = g_framebuffer_manager->NeedsPeekCacheRefresh();
++            if (flush_needed || refresh_needed)
++            {
++              DolphinWeb::WebGpuProducerProfile::ScopedSample producer_profile(
++                  DolphinWeb::WebGpuProducerProfile::Phase::FifoTailFlush);
++              if (flush_needed)
++                g_vertex_manager->Flush();
++              if (refresh_needed)
++                g_framebuffer_manager->RefreshPeekCache();
++            }
++            const bool dirty_at_skip =
++                (!flush_needed && g_vertex_manager->NeedsFlush()) ||
++                (!refresh_needed && g_framebuffer_manager->NeedsPeekCacheRefresh());
++            DolphinWeb::WgpuIdleFifoTailGate::RecordDecision(
++                flush_needed, refresh_needed, dirty_at_skip);
++          }
+         }
+       },
+       100);
+diff --git a/Source/Core/VideoCommon/FramebufferManager.h b/Source/Core/VideoCommon/FramebufferManager.h
+index 9f10918ac2..f8af1cafab 100644
+--- a/Source/Core/VideoCommon/FramebufferManager.h
++++ b/Source/Core/VideoCommon/FramebufferManager.h
+@@ -120,6 +120,10 @@ public:
+   void SetEFBCacheTileSize(u32 size);
+   void InvalidatePeekCache(bool forced = true);
+   void RefreshPeekCache();
++  bool NeedsPeekCacheRefresh() const
++  {
++    return m_efb_color_cache.needs_refresh || m_efb_depth_cache.needs_refresh;
++  }
+   void FlagPeekCacheAsOutOfDate();
+   void EndOfFrame();
+ 
+diff --git a/Source/Core/VideoCommon/VertexManagerBase.h b/Source/Core/VideoCommon/VertexManagerBase.h
+index 8397efe707..dc54fcc75f 100644
+--- a/Source/Core/VideoCommon/VertexManagerBase.h
++++ b/Source/Core/VideoCommon/VertexManagerBase.h
+@@ -117,6 +117,7 @@ public:
+   void FlushData(u32 count, u32 stride);
+ 
+   void Flush();
++  bool NeedsFlush() const { return !m_is_flushed; }
+   bool HasSendableVertices() const { return !m_is_flushed && !m_cull_all; }
+ 
+   void DoState(PointerWrap& p);
 diff --git a/Source/Core/VideoCommon/WasmWgpuIdleFifoTailGate.h b/Source/Core/VideoCommon/WasmWgpuIdleFifoTailGate.h
 new file mode 100644
+index 0000000000..ffb521dee5
 --- /dev/null
 +++ b/Source/Core/VideoCommon/WasmWgpuIdleFifoTailGate.h
 @@ -0,0 +1,66 @@
@@ -76,116 +206,3 @@ new file mode 100644
 +    s_counters.dirty_at_skip.fetch_add(1, std::memory_order_relaxed);
 +}
 +}  // namespace DolphinWeb::WgpuIdleFifoTailGate
-diff --git a/Source/Core/VideoCommon/VertexManagerBase.h b/Source/Core/VideoCommon/VertexManagerBase.h
---- a/Source/Core/VideoCommon/VertexManagerBase.h
-+++ b/Source/Core/VideoCommon/VertexManagerBase.h
-@@ -119,6 +119,7 @@ public:
-   void FlushData(u32 count, u32 stride);
- 
-   void Flush();
-+  bool NeedsFlush() const { return !m_is_flushed; }
-   bool HasSendableVertices() const { return !m_is_flushed && !m_cull_all; }
- 
-   void DoState(PointerWrap& p);
-diff --git a/Source/Core/VideoCommon/FramebufferManager.h b/Source/Core/VideoCommon/FramebufferManager.h
---- a/Source/Core/VideoCommon/FramebufferManager.h
-+++ b/Source/Core/VideoCommon/FramebufferManager.h
-@@ -119,6 +119,10 @@ public:
-   void SetEFBCacheTileSize(u32 size);
-   void InvalidatePeekCache(bool forced = true);
-   void RefreshPeekCache();
-+  bool NeedsPeekCacheRefresh() const
-+  {
-+    return m_efb_color_cache.needs_refresh || m_efb_depth_cache.needs_refresh;
-+  }
-   void FlagPeekCacheAsOutOfDate();
-   void EndOfFrame();
- 
-diff --git a/Source/Core/VideoCommon/Fifo.cpp b/Source/Core/VideoCommon/Fifo.cpp
---- a/Source/Core/VideoCommon/Fifo.cpp
-+++ b/Source/Core/VideoCommon/Fifo.cpp
-@@ -32,6 +32,7 @@
- #include "VideoCommon/VertexManagerBase.h"
- #include "VideoCommon/VideoBackendBase.h"
- #include "VideoCommon/WasmWebGpuProducerProfile.h"
-+#include "VideoCommon/WasmWgpuIdleFifoTailGate.h"
- 
- #ifdef __EMSCRIPTEN__
- #include <emscripten/emscripten.h>
-@@ -471,12 +472,37 @@ void FifoManager::RunGpuLoop()
- 
-           // The fifo is empty and it's unlikely we will get any more work in the near future.
-           // Make sure VertexManager finishes drawing any primitives it has stored in it's buffer.
-+          if (!DolphinWeb::WgpuIdleFifoTailGate::IsEnabled())
-           {
-+            // Default-off is the exact upstream behavior. Keep both calls
-+            // unconditional so the experiment has a clean rollback path.
-             DolphinWeb::WebGpuProducerProfile::ScopedSample producer_profile(
-                 DolphinWeb::WebGpuProducerProfile::Phase::FifoTailFlush);
-             g_vertex_manager->Flush();
-             g_framebuffer_manager->RefreshPeekCache();
-           }
-+          else
-+          {
-+            // The enabled experiment mirrors the early-return predicates in
-+            // Flush and RefreshPeekCache. Do not infer dirtiness from whether
-+            // this payload happened to decode a FIFO gather chunk.
-+            const bool flush_needed = g_vertex_manager->NeedsFlush();
-+            const bool refresh_needed = g_framebuffer_manager->NeedsPeekCacheRefresh();
-+            if (flush_needed || refresh_needed)
-+            {
-+              DolphinWeb::WebGpuProducerProfile::ScopedSample producer_profile(
-+                  DolphinWeb::WebGpuProducerProfile::Phase::FifoTailFlush);
-+              if (flush_needed)
-+                g_vertex_manager->Flush();
-+              if (refresh_needed)
-+                g_framebuffer_manager->RefreshPeekCache();
-+            }
-+            const bool dirty_at_skip =
-+                (!flush_needed && g_vertex_manager->NeedsFlush()) ||
-+                (!refresh_needed && g_framebuffer_manager->NeedsPeekCacheRefresh());
-+            DolphinWeb::WgpuIdleFifoTailGate::RecordDecision(
-+                flush_needed, refresh_needed, dirty_at_skip);
-+          }
-         }
-       },
-       100);
-diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
---- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-+++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -32,6 +32,7 @@
- #include "VideoCommon/VertexShaderGen.h"
- #include "VideoCommon/VideoConfig.h"
- #include "VideoCommon/WasmWebGpuProducerProfile.h"
-+#include "VideoCommon/WasmWgpuIdleFifoTailGate.h"
- 
- #include <algorithm>
- #include <atomic>
-@@ -124,6 +125,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuProducerProfileEnabled(int enabled)
-   DolphinWeb::WebGpuProducerProfile::SetEnabled(enabled != 0);
- }
- 
-+extern "C" EMSCRIPTEN_KEEPALIVE void SetWgpuIdleFifoTailElisionEnabled(int enabled)
-+{
-+  DolphinWeb::WgpuIdleFifoTailGate::SetEnabled(enabled != 0);
-+}
-+
- bool IsGeometryUploadPackEnabled()
- {
-   return s_geometry_upload_pack_enabled.load(std::memory_order_relaxed);
-@@ -296,6 +302,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
-     return DolphinWeb::WebGpuProducerProfile::GetCounters(phase).sampled_max_ns.load(
-         std::memory_order_relaxed);
-   });
-+  const auto& tail = DolphinWeb::WgpuIdleFifoTailGate::GetCounters();
-+  out << " wgtail:1," << (DolphinWeb::WgpuIdleFifoTailGate::IsEnabled() ? 1 : 0) << ","
-+      << DolphinWeb::WgpuIdleFifoTailGate::GetEpoch() << ","
-+      << DolphinWeb::WgpuIdleFifoTailGate::SAMPLE_PERIOD << ","
-+      << tail.sampled_payloads.load(std::memory_order_relaxed) << ","
-+      << tail.flush_needed.load(std::memory_order_relaxed) << ","
-+      << tail.refresh_needed.load(std::memory_order_relaxed) << ","
-+      << tail.both_clean.load(std::memory_order_relaxed) << ","
-+      << tail.dirty_at_skip.load(std::memory_order_relaxed);
-   stats = out.str();
-   return stats.c_str();
- }

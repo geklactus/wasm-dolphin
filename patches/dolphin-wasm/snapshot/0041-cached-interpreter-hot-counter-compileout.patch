@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0041-cached-interpreter-hot-counter-compileout
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-index bf2ce5b6cf..f82426f62c 100644
+index 9f3e7b0626..53a64884f4 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -54,6 +54,23 @@
@@ -37,7 +43,7 @@ index bf2ce5b6cf..f82426f62c 100644
  // §28cd spike audit: WebAssembly.Module()/Instance() synchronous wall time
  // on the pthread CPU loop. Atomic because the EM_JS compile path runs on
  // the CPU pthread while GetPpcWasmHelperStats may be called from main.
-@@ -7697,7 +7716,7 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
+@@ -7703,7 +7722,7 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
    }
  #endif
  #ifdef __EMSCRIPTEN__
@@ -46,7 +52,7 @@ index bf2ce5b6cf..f82426f62c 100644
  #endif
    for (;;)
    {
-@@ -7849,7 +7868,7 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
+@@ -7855,7 +7874,7 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
          Jit(m_ppc_state.pc);
          return;
        }
@@ -55,7 +61,7 @@ index bf2ce5b6cf..f82426f62c 100644
        normal_entry = next;
        continue;
      }
-@@ -8713,9 +8732,9 @@ s32 CachedInterpreter::FastSystemNoop(PowerPC::PowerPCState& ppc_state,
+@@ -8719,9 +8738,9 @@ s32 CachedInterpreter::FastSystemNoop(PowerPC::PowerPCState& ppc_state,
    (void)ppc_state;
    const UGeckoInstruction inst = operands.inst;
    if (inst.OPCD == 19)
@@ -67,7 +73,7 @@ index bf2ce5b6cf..f82426f62c 100644
    return sizeof(AnyCallback) + sizeof(operands);
  }
  
-@@ -8789,13 +8808,13 @@ static bool TryFastRamWordLoadStore(Core::System& system, PowerPC::PowerPCState&
+@@ -8795,13 +8814,13 @@ static bool TryFastRamWordLoadStore(Core::System& system, PowerPC::PowerPCState&
      }
  
      if (inst.OPCD == 32)
@@ -85,7 +91,7 @@ index bf2ce5b6cf..f82426f62c 100644
    }
    else
    {
-@@ -8808,16 +8827,16 @@ static bool TryFastRamWordLoadStore(Core::System& system, PowerPC::PowerPCState&
+@@ -8814,16 +8833,16 @@ static bool TryFastRamWordLoadStore(Core::System& system, PowerPC::PowerPCState&
        ppc_state.gpr[inst.RA] = address;
  
      if (inst.OPCD == 36)
@@ -107,7 +113,7 @@ index bf2ce5b6cf..f82426f62c 100644
    return true;
  }
  
-@@ -8865,7 +8884,7 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
+@@ -8871,7 +8890,7 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
        if (update)
          ppc_state.gpr[inst.RA] = address;
      }
@@ -116,7 +122,7 @@ index bf2ce5b6cf..f82426f62c 100644
    }
    else if (store_byte)
    {
-@@ -8876,7 +8895,7 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
+@@ -8882,7 +8901,7 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
  
      if ((ppc_state.Exceptions & EXCEPTION_DSI) == 0 && update)
        ppc_state.gpr[inst.RA] = address;
@@ -125,7 +131,7 @@ index bf2ce5b6cf..f82426f62c 100644
    }
    else if (load_half)
    {
-@@ -8891,7 +8910,7 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
+@@ -8897,7 +8916,7 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
        if (update)
          ppc_state.gpr[inst.RA] = address;
      }
@@ -134,7 +140,7 @@ index bf2ce5b6cf..f82426f62c 100644
    }
    else
    {
-@@ -8902,10 +8921,10 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
+@@ -8908,10 +8927,10 @@ static bool TryFastRamByteHalfLoadStore(Core::System& system, PowerPC::PowerPCSt
  
      if ((ppc_state.Exceptions & EXCEPTION_DSI) == 0 && update)
        ppc_state.gpr[inst.RA] = address;
@@ -147,7 +153,7 @@ index bf2ce5b6cf..f82426f62c 100644
    return true;
  }
  
-@@ -8954,7 +8973,7 @@ static bool TryFastRamMultiwordLoadStore(Core::System& system, PowerPC::PowerPCS
+@@ -8960,7 +8979,7 @@ static bool TryFastRamMultiwordLoadStore(Core::System& system, PowerPC::PowerPCS
      }
    }
  
@@ -156,7 +162,7 @@ index bf2ce5b6cf..f82426f62c 100644
    return true;
  }
  
-@@ -8992,7 +9011,7 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
+@@ -8998,7 +9017,7 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
        ppc_state.npc = destination_addr;
      }
  
@@ -165,7 +171,7 @@ index bf2ce5b6cf..f82426f62c 100644
      break;
    }
    case 18:  // bx
-@@ -9005,7 +9024,7 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
+@@ -9011,7 +9030,7 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
        destination_addr += current_pc;
      ppc_state.npc = destination_addr;
  
@@ -174,7 +180,7 @@ index bf2ce5b6cf..f82426f62c 100644
      break;
    }
    case 19:
-@@ -9025,7 +9044,7 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
+@@ -9031,7 +9050,7 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
            LR(ppc_state) = current_pc + 4;
        }
  
@@ -183,7 +189,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      else if (inst.SUBOP10 == 528)  // bcctrx
      {
-@@ -9039,14 +9058,14 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
+@@ -9045,14 +9064,14 @@ s32 CachedInterpreter::FastBranch(PowerPC::PowerPCState& ppc_state,
            LR(ppc_state) = current_pc + 4;
        }
  
@@ -200,7 +206,7 @@ index bf2ce5b6cf..f82426f62c 100644
    return sizeof(AnyCallback) + sizeof(operands);
  }
  
-@@ -9061,9 +9080,9 @@ s32 CachedInterpreter::FastBranchBdnz(PowerPC::PowerPCState& ppc_state,
+@@ -9067,9 +9086,9 @@ s32 CachedInterpreter::FastBranchBdnz(PowerPC::PowerPCState& ppc_state,
    else
      ppc_state.npc = current_pc + 4;
  
@@ -213,7 +219,7 @@ index bf2ce5b6cf..f82426f62c 100644
    return sizeof(AnyCallback) + sizeof(operands);
  }
  
-@@ -9076,7 +9095,7 @@ s32 CachedInterpreter::FastInteger(PowerPC::PowerPCState& ppc_state,
+@@ -9082,7 +9101,7 @@ s32 CachedInterpreter::FastInteger(PowerPC::PowerPCState& ppc_state,
    case 7:  // mulli
      ppc_state.gpr[inst.RD] =
          static_cast<u32>(static_cast<s32>(ppc_state.gpr[inst.RA]) * inst.SIMM_16);
@@ -222,7 +228,7 @@ index bf2ce5b6cf..f82426f62c 100644
      break;
    case 8:  // subfic
    {
-@@ -9084,7 +9103,7 @@ s32 CachedInterpreter::FastInteger(PowerPC::PowerPCState& ppc_state,
+@@ -9090,7 +9109,7 @@ s32 CachedInterpreter::FastInteger(PowerPC::PowerPCState& ppc_state,
      const u32 immediate = static_cast<u32>(static_cast<s32>(inst.SIMM_16));
      ppc_state.gpr[inst.RD] = immediate - lhs;
      ppc_state.SetCarry(immediate >= lhs);
@@ -231,7 +237,7 @@ index bf2ce5b6cf..f82426f62c 100644
      break;
    }
    case 10:  // cmpli
-@@ -9104,11 +9123,11 @@ s32 CachedInterpreter::FastInteger(PowerPC::PowerPCState& ppc_state,
+@@ -9110,11 +9129,11 @@ s32 CachedInterpreter::FastInteger(PowerPC::PowerPCState& ppc_state,
      if (inst.OPCD == 13)
      {
        FastUpdateCR0(ppc_state, result);
@@ -245,7 +251,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      break;
    }
-@@ -9297,16 +9316,16 @@ static bool TryFastRamFloatLoadStore(Core::System& system, PowerPC::PowerPCState
+@@ -9303,16 +9322,16 @@ static bool TryFastRamFloatLoadStore(Core::System& system, PowerPC::PowerPCState
        ppc_state.ps[inst.FD].Fill(ConvertToDouble(value));
  
      if (indexed)
@@ -265,7 +271,7 @@ index bf2ce5b6cf..f82426f62c 100644
    }
    else
    {
-@@ -9319,11 +9338,11 @@ static bool TryFastRamFloatLoadStore(Core::System& system, PowerPC::PowerPCState
+@@ -9325,11 +9344,11 @@ static bool TryFastRamFloatLoadStore(Core::System& system, PowerPC::PowerPCState
        system.GetMMU().Write<u32>(value, address);
  
      if (store_integer_word)
@@ -280,7 +286,7 @@ index bf2ce5b6cf..f82426f62c 100644
    }
  
    return true;
-@@ -9336,7 +9355,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9342,7 +9361,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
    if (!FastCheckFpuAvailable(ppc_state, power_pc, current_pc))
      return 0;
  
@@ -289,7 +295,7 @@ index bf2ce5b6cf..f82426f62c 100644
  
    switch (inst.OPCD)
    {
-@@ -9367,9 +9386,9 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9373,9 +9392,9 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          ppc_state.ps[inst.FD].Fill(result);
          ppc_state.UpdateFPRFSingle(result);
          if (add)
@@ -301,7 +307,7 @@ index bf2ce5b6cf..f82426f62c 100644
        }
        else
        {
-@@ -9385,9 +9404,9 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9391,9 +9410,9 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
        }
  
        if (add)
@@ -313,7 +319,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      else if (inst.SUBOP5 == 25)  // fmulsx
      {
-@@ -9405,7 +9424,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9411,7 +9430,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          ppc_state.fpscr.FI = 0;
          ppc_state.fpscr.FR = 0;
          ppc_state.UpdateFPRFSingle(result);
@@ -322,7 +328,7 @@ index bf2ce5b6cf..f82426f62c 100644
        }
        else
        {
-@@ -9422,7 +9441,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9428,7 +9447,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          }
        }
  
@@ -331,7 +337,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      else if (inst.SUBOP5 == 29)  // fmaddsx
      {
-@@ -9443,7 +9462,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9449,7 +9468,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          ppc_state.fpscr.FI = product != result;
          ppc_state.fpscr.FR = 0;
          ppc_state.UpdateFPRFSingle(result);
@@ -340,7 +346,7 @@ index bf2ce5b6cf..f82426f62c 100644
        }
        else
        {
-@@ -9460,7 +9479,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9466,7 +9485,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          }
        }
  
@@ -349,7 +355,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      else if (inst.SUBOP5 == 30)  // fnmsubsx
      {
-@@ -9480,7 +9499,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9486,7 +9505,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          const float result = std::isnan(tmp) ? tmp : -tmp;
          ppc_state.ps[inst.FD].Fill(result);
          ppc_state.UpdateFPRFSingle(result);
@@ -358,7 +364,7 @@ index bf2ce5b6cf..f82426f62c 100644
        }
        else
        {
-@@ -9496,7 +9515,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9502,7 +9521,7 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          }
        }
  
@@ -367,7 +373,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      break;
    case 63:
-@@ -9523,19 +9542,19 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9529,19 +9548,19 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
          if (value == 0 && std::signbit(b))
            result |= 0x100000000ull;
          ppc_state.ps[inst.FD].SetPS0(result);
@@ -390,7 +396,7 @@ index bf2ce5b6cf..f82426f62c 100644
      }
      else if (inst.SUBOP10 == 40 || inst.SUBOP10 == 136 || inst.SUBOP10 == 264)
      {
-@@ -9543,17 +9562,17 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
+@@ -9549,17 +9568,17 @@ s32 CachedInterpreter::FastFloat(PowerPC::PowerPCState& ppc_state,
        if (inst.SUBOP10 == 40)  // fnegx
        {
          value ^= UINT64_C(1) << 63;
@@ -411,7 +417,7 @@ index bf2ce5b6cf..f82426f62c 100644
        }
        ppc_state.ps[inst.FD].SetPS0(value);
      }
-@@ -10999,6 +11018,7 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11005,6 +11024,7 @@ extern "C" const char* GetPpcWasmHelperStats()
  
    std::ostringstream out;
    out << (s_wasm_jit_direct_only ? "tier:guarded " : "tier:mixed ");
@@ -419,7 +425,7 @@ index bf2ce5b6cf..f82426f62c 100644
    const u32 average_prefix =
        s_wasm_block_attempt_count == 0 ? 0 : s_wasm_prefix_instruction_sum / s_wasm_block_attempt_count;
    out << "jit attempts:" << s_wasm_block_attempt_count
-@@ -11027,12 +11047,14 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11033,12 +11053,14 @@ extern "C" const char* GetPpcWasmHelperStats()
        << "statei64:" << s_wasm_emit_state_load_i64_count << "ld/"
        << s_wasm_emit_state_store_i64_count << "st ";
    // §28bz audit: §28bt re-dispatch chain depth. Avg chain length = 1 + iter/entry.
@@ -434,4 +440,3 @@ index bf2ce5b6cf..f82426f62c 100644
    // §28cd spike audit: WebAssembly.Module + Instance synchronous wall time on
    // the pthread CPU loop. Module = full JIT compile, Instance = link/instantiate.
    // Both block the game loop. Hits/misses tell us cache effectiveness.
-

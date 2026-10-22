@@ -1,23 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:13 +0000
+Subject: [PATCH] 0054-emscripten-sys-directory-and-wii-nand-seed
+
+
 diff --git a/Source/Core/Common/FileUtil.cpp b/Source/Core/Common/FileUtil.cpp
+index ba52f63094..0f71861617 100644
 --- a/Source/Core/Common/FileUtil.cpp
 +++ b/Source/Core/Common/FileUtil.cpp
-@@ -778,6 +778,12 @@
+@@ -778,6 +778,12 @@ static std::string CreateSysDirectoryPath()
  #elif defined ANDROID
-   const std::string sys_directory = s_android_sys_directory + DIR_SEP;
+   sys_directory = s_android_sys_directory + DIR_SEP;
    ASSERT_MSG(COMMON, !s_android_sys_directory.empty(), "Sys directory has not been set");
 +#elif defined(__EMSCRIPTEN__)
 +  // DATA_DIR points at the emsdk sysroot on disk, which does not exist inside
 +  // the wasm filesystem, so the default path resolves to nothing at runtime.
 +  // The Sys data games actually need is embedded at this fixed path instead --
 +  // see the --embed-file link option in Source/Core/Core/CMakeLists.txt.
-+  const std::string sys_directory = "/dolphin-sys" DIR_SEP;
++  sys_directory = "/dolphin-sys" DIR_SEP;
  #else
-   const std::string sys_directory = SYSDATA_DIR DIR_SEP;
- #endif
+   const std::string local_sys_directory = GetExeDirectory() + DIR_SEP SYS_FOLDER_NAME DIR_SEP;
+   if (IsDirectory(local_sys_directory))
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
+index 62c84e1772..ccc42e182c 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -945,6 +945,14 @@
+@@ -957,6 +957,14 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      # WORKERFS" in upstream-discio-worker.js before load completes, so no disc
      # ever mounts. MEMFS survives only because it is the default.
      "-sEXPORTED_RUNTIME_METHODS=['FS','ccall','cwrap','UTF8ToString','HEAPU8','PThread','WORKERFS','NODEFS']"

@@ -49,7 +49,10 @@ struct JitBlock
 };
 struct JitBase
 {
-  struct { std::set<u32> fifoWriteAddresses, pairedQuantizeAddresses, noSpeculativeConstantsAddresses; } js;
+  // Upstream #14804: the instruction address sets are LazyMemoryRegionBitSets; Clear() is all the
+  // extracted cache methods touch.
+  struct BitSet { void Clear() {} };
+  struct { BitSet fifoWriteAddresses, pairedQuantizeAddresses, noSpeculativeConstantsAddresses; } js;
   struct { struct Translation { bool valid; u32 address; }; Translation JitCache_TranslateAddress(u32 address) { return {true, address}; } } m_mmu;
 };
 class JitBaseBlockCache
@@ -57,7 +60,7 @@ class JitBaseBlockCache
 public:
   explicit JitBaseBlockCache(JitBase& jit) : m_jit(jit) {}
   virtual ~JitBaseBlockCache() = default;
-  virtual void Init() {}
+  virtual bool Init() { return true; }
   void Clear();
   JitBlock* GetBlockFromStartAddress(u32 address, CPUEmuFeatureFlags features);
   void LinkBlockExits(JitBlock& block); void LinkBlock(JitBlock& block); void UnlinkBlock(const JitBlock& block);
@@ -83,7 +86,7 @@ protected:
   std::map<u32, std::set<JitBlock*>> links_to, block_range_map;
   u8** m_entry_points_ptr = nullptr;
   std::array<JitBlock*, 8> m_fast_block_map_fallback{};
-  struct { void ClearAll() {} } valid_block;
+  struct { void Clear() {} } valid_block;
   struct { void Clear() {} } m_entry_points_arena;
 };
 

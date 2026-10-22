@@ -1,12 +1,11 @@
-diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
---- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
-+++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
-@@ -10,3 +10,4 @@ namespace WebGPU
- bool IsGeometryUploadPackEnabled();
- u64 GetGeometryUploadPackEpoch();
-+void InvalidateGeometryUploadPack();
- 
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0026-webgpu-geometry-lifecycle-invalidation
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index 1e1bd4c85a..a8b7921ec4 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -95,7 +95,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuGeometryPackEnabled(int enabled)
@@ -30,7 +29,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
  void RecordUboPrepareCpu(u32 class_index, double start_ms)
  {
    if (!s_ubo_cache_metrics_enabled.load(std::memory_order_relaxed))
-@@ -1022,6 +1027,7 @@ void WebGPUGfx::AbortRecordedPass()
+@@ -1023,6 +1028,7 @@ void WebGPUGfx::AbortRecordedPass()
  {
    m_cmd_stream.AbortPass();
    m_pass_open = false;
@@ -46,3 +45,15 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    if (m_ubo_cache_active)
      InvalidateUboSlices();
    return false;
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
+index 1e4686c87c..0cb2ee3674 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
+@@ -10,6 +10,7 @@ namespace WebGPU
+ {
+ bool IsGeometryUploadPackEnabled();
+ u64 GetGeometryUploadPackEpoch();
++void InvalidateGeometryUploadPack();
+ 
+ // Day-33 A3: a real VertexManagerBase for the remote WebGPU backend.
+ //

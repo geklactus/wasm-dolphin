@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:13 +0000
+Subject: [PATCH] 0059-webgpu-scissored-clear-rect-producer
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 index 22fb8e6d57..f1ecf610fe 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
@@ -63,7 +69,7 @@ index 129037eb35..7dbe6a2ce5 100644
    bool PushDrawIndexed(u32 idx_count, u32 inst_count, u32 first_idx, u32 base_vtx);
    bool PushEndPass();
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 8a5c9d7651..c278bdee61 100644
+index 8a5c9d7651..eb0e93632a 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -39,6 +39,13 @@

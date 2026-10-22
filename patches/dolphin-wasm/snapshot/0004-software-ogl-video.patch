@@ -1,11 +1,11 @@
-From 97e4d237aaf79d8203ea269181040a22d396ede9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: wasm-dolphin patch snapshot <snapshot@local.invalid>
-Date: Thu, 9 Jul 2026 14:42:32 -1000
-Subject: [PATCH 4/6] Browser software and OGL video snapshot
+Date: Thu, 22 Oct 2026 14:16:17 +0000
+Subject: [PATCH] 0004-software-ogl-video
 
 
 diff --git a/Source/Core/VideoBackends/OGL/OGLConfig.cpp b/Source/Core/VideoBackends/OGL/OGLConfig.cpp
-index ce1b7a5..64ec994 100644
+index ce1b7a5b78..64ec994018 100644
 --- a/Source/Core/VideoBackends/OGL/OGLConfig.cpp
 +++ b/Source/Core/VideoBackends/OGL/OGLConfig.cpp
 @@ -537,6 +537,14 @@ bool PopulateConfig(GLContext* m_main_gl_context)
@@ -24,7 +24,7 @@ index ce1b7a5..64ec994 100644
    g_backend_info.bSupportsGLLayerInFS =
        g_backend_info.bSupportsGeometryShaders && g_ogl_config.eSupportedGLSLVersion >= Glsl430;
 diff --git a/Source/Core/VideoBackends/OGL/OGLGfx.cpp b/Source/Core/VideoBackends/OGL/OGLGfx.cpp
-index ff5402b..cc13ddf 100644
+index ff5402ba03..cc13ddf672 100644
 --- a/Source/Core/VideoBackends/OGL/OGLGfx.cpp
 +++ b/Source/Core/VideoBackends/OGL/OGLGfx.cpp
 @@ -268,6 +268,20 @@ void OGLGfx::SetViewport(float x, float y, float width, float height, float near
@@ -49,7 +49,7 @@ index ff5402b..cc13ddf 100644
  }
  
 diff --git a/Source/Core/VideoBackends/OGL/OGLMain.cpp b/Source/Core/VideoBackends/OGL/OGLMain.cpp
-index df0c28a..be4d775 100644
+index df0c28a21c..be4d7753a8 100644
 --- a/Source/Core/VideoBackends/OGL/OGLMain.cpp
 +++ b/Source/Core/VideoBackends/OGL/OGLMain.cpp
 @@ -39,6 +39,12 @@ Make AA apply instantly during gameplay if possible
@@ -141,7 +141,7 @@ index df0c28a..be4d775 100644
    return true;
  }
 diff --git a/Source/Core/VideoBackends/OGL/OGLNativeVertexFormat.cpp b/Source/Core/VideoBackends/OGL/OGLNativeVertexFormat.cpp
-index 921ef61..2262fe3 100644
+index 921ef61b40..2262fe35b4 100644
 --- a/Source/Core/VideoBackends/OGL/OGLNativeVertexFormat.cpp
 +++ b/Source/Core/VideoBackends/OGL/OGLNativeVertexFormat.cpp
 @@ -38,12 +38,27 @@ static void SetPointer(ShaderAttrib attrib, u32 stride, const AttributeFormat& f
@@ -173,7 +173,7 @@ index 921ef61..2262fe3 100644
  
  GLVertexFormat::GLVertexFormat(const PortableVertexDeclaration& vtx_decl)
 diff --git a/Source/Core/VideoBackends/OGL/OGLStreamBuffer.cpp b/Source/Core/VideoBackends/OGL/OGLStreamBuffer.cpp
-index 2eec584..0958e21 100644
+index 2eec58418c..0958e21229 100644
 --- a/Source/Core/VideoBackends/OGL/OGLStreamBuffer.cpp
 +++ b/Source/Core/VideoBackends/OGL/OGLStreamBuffer.cpp
 @@ -148,9 +148,12 @@ public:
@@ -220,7 +220,7 @@ index 2eec584..0958e21 100644
    if (!g_ogl_config.bSupportsGLBaseVertex)
    {
 diff --git a/Source/Core/VideoBackends/OGL/OGLTexture.cpp b/Source/Core/VideoBackends/OGL/OGLTexture.cpp
-index 003a7ec..965f548 100644
+index 003a7ec442..965f5485ec 100644
 --- a/Source/Core/VideoBackends/OGL/OGLTexture.cpp
 +++ b/Source/Core/VideoBackends/OGL/OGLTexture.cpp
 @@ -461,6 +461,12 @@ std::unique_ptr<OGLStagingTexture> OGLStagingTexture::Create(StagingTextureType
@@ -250,7 +250,7 @@ index 003a7ec..965f548 100644
    m_map_pointer = static_cast<char*>(glMapBufferRange(m_target, 0, m_buffer_size, flags));
    glBindBuffer(m_target, 0);
 diff --git a/Source/Core/VideoBackends/Software/Rasterizer.cpp b/Source/Core/VideoBackends/Software/Rasterizer.cpp
-index 2839e05..ced6b9a 100644
+index 2839e05b73..ced6b9a242 100644
 --- a/Source/Core/VideoBackends/Software/Rasterizer.cpp
 +++ b/Source/Core/VideoBackends/Software/Rasterizer.cpp
 @@ -22,6 +22,15 @@
@@ -343,7 +343,7 @@ index 2839e05..ced6b9a 100644
  
  static inline void CalculateLOD(s32* lodp, bool* linear, u32 texmap, u32 texcoord)
 diff --git a/Source/Core/VideoBackends/Software/SWEfbInterface.cpp b/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
-index 7797b1d..9f2fa02 100644
+index 9dbc83c112..b2c232ff40 100644
 --- a/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
 +++ b/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
 @@ -5,6 +5,7 @@
@@ -537,7 +537,7 @@ index 7797b1d..9f2fa02 100644
  
  bool ZCompare(u16 x, u16 y, u32 z)
 diff --git a/Source/Core/VideoBackends/Software/SWGfx.cpp b/Source/Core/VideoBackends/Software/SWGfx.cpp
-index 7004c50..386bd66 100644
+index 7004c50864..386bd66530 100644
 --- a/Source/Core/VideoBackends/Software/SWGfx.cpp
 +++ b/Source/Core/VideoBackends/Software/SWGfx.cpp
 @@ -57,6 +57,9 @@ SWGfx::CreateFramebuffer(AbstractTexture* color_attachment, AbstractTexture* dep
@@ -561,7 +561,7 @@ index 7004c50..386bd66 100644
            1.0f, AbstractTextureFormat::RGBA8};
  }
 diff --git a/Source/Core/VideoBackends/Software/SWOGLWindow.cpp b/Source/Core/VideoBackends/Software/SWOGLWindow.cpp
-index a002e3e..7f2b5f0 100644
+index a002e3e519..7f2b5f0f31 100644
 --- a/Source/Core/VideoBackends/Software/SWOGLWindow.cpp
 +++ b/Source/Core/VideoBackends/Software/SWOGLWindow.cpp
 @@ -29,11 +29,14 @@ std::unique_ptr<SWOGLWindow> SWOGLWindow::Create(const WindowSystemInfo& wsi)

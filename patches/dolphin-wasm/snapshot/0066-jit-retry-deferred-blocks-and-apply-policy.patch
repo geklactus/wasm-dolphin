@@ -1,4 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:14 +0000
+Subject: [PATCH] 0066-jit-retry-deferred-blocks-and-apply-policy
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index bb647fec77..4a82174f2e 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -2,8 +2,10 @@
@@ -12,7 +19,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  #include <array>
  #include <atomic>
  #include <bit>
-@@ -445,6 +447,39 @@
+@@ -433,6 +435,39 @@ extern "C" void DolphinWeb_RecordCacheMiss()
  namespace
  {
  bool s_wasm_jit_enabled = false;
@@ -52,7 +59,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  bool s_wasm_jit_direct_only = true;
  u32 s_wasm_direct_tier_reject_count = 0;
  // §28bj: was 2048 — far below Melee battle's ~6500 hot blocks, so
-@@ -7735,6 +7770,11 @@
+@@ -7723,6 +7758,11 @@ bool CachedInterpreter::Init()
  
  void CachedInterpreter::Shutdown()
  {
@@ -64,7 +71,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    m_block_cache.Shutdown();
  }
  
-@@ -8040,6 +8080,9 @@
+@@ -8014,6 +8054,9 @@ void CachedInterpreter::Run()
    const CPU::State* state_ptr = m_system.GetCPU().GetStatePtr();
    while (*state_ptr == CPU::State::Running)
    {
@@ -74,7 +81,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
      // §28cn metrics-gated per-slice wall-time profiling. The timestamp below
      // spans Advance + ExecuteOneBlock; >16000us means the CPU pthread crossed
      // one 60Hz frame budget, including intentional waits.
-@@ -8067,6 +8110,8 @@
+@@ -8041,6 +8084,8 @@ void CachedInterpreter::Run()
        s_wasm_compiles_this_slice = 0;
        s_wasm_compile_us_this_slice = 0;
      }
@@ -83,7 +90,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
      // Start new timing slice
      // Metrics-off runs avoid all per-slice clocks. BeginSlice also resets
      // the exclusive wait/work attribution for this one CoreTiming slice.
-@@ -8135,6 +8180,9 @@
+@@ -8109,6 +8154,9 @@ void CachedInterpreter::SingleStep()
  {
    // Enter new timing slice
    m_system.GetCoreTiming().Advance();
@@ -93,7 +100,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    ExecuteOneBlock(false);  // §28bt: never chain blocks under the debugger step
  }
  
-@@ -10600,6 +10648,8 @@
+@@ -10493,6 +10541,8 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
          s_wasm_compile_us_this_slice >= COMPILE_THROTTLE_MAX_US_PER_SLICE)
      {
        s_wasm_compile_throttle_reject_count.fetch_add(1, std::memory_order_relaxed);
@@ -102,17 +109,16 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
        return false;
      }
    }
-@@ -11114,11 +11164,16 @@
+@@ -11002,11 +11052,16 @@ extern "C" u32 GetPpcWasmBlockRunCount()
    return s_wasm_block_run_count;
  }
  
 -extern "C" void SetPpcWasmJitEnabled(int enabled)
--{
++namespace
+ {
 -  const bool next_enabled = enabled != 0;
 -  s_wasm_jit_direct_only = enabled < 2;
 -  if (next_enabled && !s_wasm_jit_enabled)
-+namespace
-+{
 +void ApplyRequestedWasmPolicy(CachedInterpreter& cpu)
 +{
 +  const int requested = s_requested_wasm_policy.load(std::memory_order_acquire);
@@ -124,7 +130,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    {
      s_fast_os_interrupt_verified_modes = 0;
      s_fast_melee_input_status_verified = false;
-@@ -11136,6 +11191,19 @@
+@@ -11024,6 +11079,19 @@ extern "C" void SetPpcWasmJitEnabled(int enabled)
      s_fast_melee_input_poll_loadstores = 0;
    }
    s_wasm_jit_enabled = next_enabled;
@@ -144,7 +150,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  }
  
  extern "C" void SetPpcProfileEnabled(int enabled)
-@@ -11210,6 +11278,8 @@
+@@ -11098,6 +11166,8 @@ extern "C" const char* GetPpcProfileStats()
  extern "C" const char* GetPpcWasmHelperStats()
  {
    static std::string stats;
@@ -153,7 +159,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    static u32 last_refresh_block_run_count = 0;
    static u32 last_refresh_block_attempt_count = 0;
    static u32 last_refresh_block_compile_count = 0;
-@@ -11223,7 +11293,7 @@
+@@ -11111,7 +11181,7 @@ extern "C" const char* GetPpcWasmHelperStats()
    const u64 fallback_dispatch_total =
        fallback_dispatch.hit + fallback_dispatch.empty_miss + fallback_dispatch.collision_miss;
  
@@ -162,7 +168,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
        s_wasm_block_run_count - last_refresh_block_run_count < STATS_REFRESH_BLOCK_RUNS &&
        s_wasm_block_attempt_count == last_refresh_block_attempt_count &&
        s_wasm_block_compile_count == last_refresh_block_compile_count &&
-@@ -11235,6 +11305,7 @@
+@@ -11123,6 +11193,7 @@ extern "C" const char* GetPpcWasmHelperStats()
    {
      return stats.c_str();
    }
@@ -170,7 +176,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    last_refresh_block_run_count = s_wasm_block_run_count;
    last_refresh_block_attempt_count = s_wasm_block_attempt_count;
    last_refresh_block_compile_count = s_wasm_block_compile_count;
-@@ -11259,7 +11330,7 @@
+@@ -11147,7 +11218,7 @@ extern "C" const char* GetPpcWasmHelperStats()
                      [](const auto& lhs, const auto& rhs) { return lhs.first > rhs.first; });
  
    std::ostringstream out;
@@ -179,7 +185,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    out << "hotcounts:" << (DOLPHIN_WEB_HOT_COUNTERS ? "on " : "off ");
    const u32 average_prefix =
        s_wasm_block_attempt_count == 0 ? 0 : s_wasm_prefix_instruction_sum / s_wasm_block_attempt_count;
-@@ -12218,6 +12289,10 @@
+@@ -12103,6 +12174,10 @@ void CachedInterpreter::Jit(u32 em_address)
  
  void CachedInterpreter::Jit(u32 em_address, bool clear_cache_and_retry_on_failure)
  {
@@ -190,7 +196,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    if (IsAlmostFull() || SConfig::GetInstance().bJITNoBlockCache)
    {
      ClearCache();
-@@ -12290,6 +12365,8 @@
+@@ -12175,6 +12250,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
    auto& breakpoints = power_pc.GetBreakPoints();
  
  #ifdef __EMSCRIPTEN__
@@ -199,7 +205,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    if (TryWriteWasmBlock(nextPC))
      return true;
  #endif
-@@ -12397,6 +12474,9 @@
+@@ -12282,6 +12359,9 @@ std::size_t CachedInterpreter::DisassembleFarCode(const JitBlock& block, std::os
  
  void CachedInterpreter::ClearCache()
  {
@@ -211,6 +217,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    ClearCodeSpace();
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/WasmDeferredCompileQueue.h b/Source/Core/Core/PowerPC/CachedInterpreter/WasmDeferredCompileQueue.h
 new file mode 100644
+index 0000000000..ae423e8354
 --- /dev/null
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/WasmDeferredCompileQueue.h
 @@ -0,0 +1,73 @@

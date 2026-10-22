@@ -1,4 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:12 +0000
+Subject: [PATCH] 0051-tag-webgpu-ubo-ring-resource
+
+
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
+index 4d839f3297..9b3a143b9a 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
+@@ -1010,7 +1010,7 @@ void WebGPUCommandStream::RollbackLastUpload(u32 src_heap_ptr, u32 len)
+   }
+ }
+ 
+-u32 WebGPUCommandStream::PushCreateBuffer(u32 size, u32 usage_flags)
++u32 WebGPUCommandStream::PushCreateBuffer(u32 size, u32 usage_flags, BufferResourceRole role)
+ {
+   if (!m_header)
+   {
+@@ -1023,6 +1023,7 @@ u32 WebGPUCommandStream::PushCreateBuffer(u32 size, u32 usage_flags)
+   rec.arg.u[0] = id;
+   rec.arg.u[1] = size;
+   rec.arg.u[2] = usage_flags;
++  rec.arg.u[3] = static_cast<u32>(role);
+   if (!Push(rec))
+     return 0;
+   return id;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
+index 0b8745dd48..3c7c729fc8 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 @@ -63,7 +63,7 @@ enum class CmdOp : u32
@@ -29,7 +57,6 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Cor
  {
    u32 src_heap_ptr = 0;
 @@ -331,7 +342,8 @@ public:
-   u32 UploadAllocUboPacket(
        const DenseUboPacketPlan& plan,
        const std::array<DenseUboClass, kDenseUboClassCount>& classes);
  
@@ -39,27 +66,8 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Cor
    bool PushUploadBuffer(u32 id, u32 dst_offset, u32 src_heap_ptr, u32 len,
                          BufferUploadRole role);
    u32 PushCreateTexture(u32 w, u32 h, u32 wgpu_format, u32 usage_flags, u32 layers = 1);
-diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
---- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-+++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-@@ -1010,7 +1010,7 @@ void WebGPUCommandStream::RollbackLastUpload(u32 src_heap_ptr, u32 len)
-   }
- }
- 
--u32 WebGPUCommandStream::PushCreateBuffer(u32 size, u32 usage_flags)
-+u32 WebGPUCommandStream::PushCreateBuffer(u32 size, u32 usage_flags, BufferResourceRole role)
- {
-   if (!m_header)
-   {
-@@ -1023,6 +1023,7 @@ u32 WebGPUCommandStream::PushCreateBuffer(u32 size, u32 usage_flags)
-   rec.arg.u[0] = id;
-   rec.arg.u[1] = size;
-   rec.arg.u[2] = usage_flags;
-+  rec.arg.u[3] = static_cast<u32>(role);
-   if (!Push(rec))
-     return 0;
-   return id;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index 1fbda3fdb4..3ec15d78a2 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -1490,7 +1490,8 @@ bool WebGPUGfx::PrepareDrawResources()

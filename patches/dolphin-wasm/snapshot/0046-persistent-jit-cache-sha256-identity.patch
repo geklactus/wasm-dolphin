@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:35 +0000
+Subject: [PATCH] 0046-persistent-jit-cache-sha256-identity
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-index 85b38788fe..c53ea9b2a1 100644
+index fda71f5818..e157dcfa7d 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -53,6 +53,7 @@
@@ -85,7 +91,7 @@ index 85b38788fe..c53ea9b2a1 100644
        fastcheck_gpfifo_index, fast_os_interrupt_call_index, fast_melee_input_status_call_index,
        fast_melee_status_call_index, fast_melee_service_poll_call_index);
  }
-@@ -10825,10 +10842,11 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
+@@ -10831,10 +10848,11 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
        reinterpret_cast<std::uintptr_t>(&DolphinWeb_CachedInterpreterFastMeleeStatusCall));
    const auto fast_melee_service_poll_call_index = static_cast<int>(
        reinterpret_cast<std::uintptr_t>(&DolphinWeb_CachedInterpreterFastMeleeServicePollCall));
