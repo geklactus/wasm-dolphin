@@ -1,0 +1,385 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 16:01:34 +0000
+Subject: [PATCH] 0069-web-input-backend
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The browser's ControllerInterface backend, ciface::Web (CIFACE_USE_WEB,
+Emscripten only): four "Web/N/Wii Remote" devices whose state the page sets
+through the exported SetWiimoteState (buttons word, pointer, Nunchuk stick,
+optional motion). Their input names are the Bluetooth passthrough device's
+(A, B, 1, 2, -, +, HOME, Up/Down/Left/Right, Nunchuk C/Z/X±/Y±, Accel *,
+Gyro *) plus Cursor X±/Y± and Cursor Hidden for pointing and Shake buttons,
+so the emulated Wii Remote binds to them with an ordinary WiimoteNew.ini and
+upstream's IR camera, motion and extension emulation run unchanged.
+
+diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
+index b4ba1e46e5..2c628161f1 100644
+--- a/Source/Core/Core/CMakeLists.txt
++++ b/Source/Core/Core/CMakeLists.txt
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+     "-sSTACK_SIZE=5242880"
+     "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
+     "-sPTHREAD_POOL_SIZE=16"
+-    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_SetRendererFeatureMask','_GetRendererFeatureMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuOwnershipTraceEnabled','_AcknowledgeWebGpuOwnershipTraceCapture','_GetWebGpuOwnershipTracePtr','_GetWebGpuOwnershipTraceCapacity','_SetWebGpuProducerProfileEnabled','_SetWebGpuDrawProfileEnabled','_SetWgpuDeepDiagnosticsEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
++    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_SetRendererFeatureMask','_GetRendererFeatureMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuOwnershipTraceEnabled','_AcknowledgeWebGpuOwnershipTraceCapture','_GetWebGpuOwnershipTracePtr','_GetWebGpuOwnershipTraceCapacity','_SetWebGpuProducerProfileEnabled','_SetWebGpuDrawProfileEnabled','_SetWgpuDeepDiagnosticsEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_SetWiimoteState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
+     # WORKERFS and NODEFS are named here so they survive dead-code
+     # elimination. -lworkerfs.js / -lnodefs.js above only make the JS
+     # libraries available to the link; current Emscripten still drops a JS
+diff --git a/Source/Core/InputCommon/CMakeLists.txt b/Source/Core/InputCommon/CMakeLists.txt
+index 036aa2ef9b..b4a1141970 100644
+--- a/Source/Core/InputCommon/CMakeLists.txt
++++ b/Source/Core/InputCommon/CMakeLists.txt
+@@ -144,6 +144,14 @@ elseif(ANDROID)
+   )
+ endif()
+ 
++if(EMSCRIPTEN)
++  target_compile_definitions(inputcommon PRIVATE -DCIFACE_USE_WEB)
++  target_sources(inputcommon PRIVATE
++    ControllerInterface/Web/Web.cpp
++    ControllerInterface/Web/Web.h
++  )
++endif()
++
+ if(TARGET LibUSB::LibUSB)
+   target_link_libraries(inputcommon PUBLIC LibUSB::LibUSB)
+ endif()
+diff --git a/Source/Core/InputCommon/ControllerInterface/ControllerInterface.cpp b/Source/Core/InputCommon/ControllerInterface/ControllerInterface.cpp
+index 20fd517b2d..dbc73c3827 100644
+--- a/Source/Core/InputCommon/ControllerInterface/ControllerInterface.cpp
++++ b/Source/Core/InputCommon/ControllerInterface/ControllerInterface.cpp
+@@ -36,6 +36,9 @@
+ #ifdef CIFACE_USE_STEAMDECK
+ #include "InputCommon/ControllerInterface/SteamDeck/SteamDeck.h"
+ #endif
++#ifdef CIFACE_USE_WEB
++#include "InputCommon/ControllerInterface/Web/Web.h"
++#endif
+ 
+ ControllerInterface g_controller_interface;
+ 
+@@ -85,6 +88,9 @@ void ControllerInterface::Initialize(const WindowSystemInfo& wsi)
+ #ifdef CIFACE_USE_STEAMDECK
+   m_input_backends.emplace_back(ciface::SteamDeck::CreateInputBackend(this));
+ #endif
++#ifdef CIFACE_USE_WEB
++  m_input_backends.emplace_back(ciface::Web::CreateInputBackend(this));
++#endif
+ 
+   // Don't allow backends to add devices before the first RefreshDevices() as they will be cleaned
+   // there. Or they'd end up waiting on the devices mutex if populated from another thread.
+diff --git a/Source/Core/InputCommon/ControllerInterface/Web/Web.cpp b/Source/Core/InputCommon/ControllerInterface/Web/Web.cpp
+new file mode 100644
+index 0000000000..944760485b
+--- /dev/null
++++ b/Source/Core/InputCommon/ControllerInterface/Web/Web.cpp
+@@ -0,0 +1,239 @@
++// Copyright 2026 Dolphin Emulator Project (wasm-dolphin)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "InputCommon/ControllerInterface/Web/Web.h"
++
++#include <algorithm>
++#include <array>
++#include <memory>
++#include <mutex>
++#include <optional>
++#include <string>
++#include <string_view>
++
++#include "Common/CommonTypes.h"
++#include "InputCommon/ControllerInterface/ControllerInterface.h"
++#include "InputCommon/ControllerInterface/CoreDevice.h"
++
++namespace ciface::Web
++{
++namespace
++{
++constexpr std::string_view SOURCE_NAME = "Web";
++
++// What the page last reported for one remote. Written by SetWiimoteState on whatever thread
++// the worker calls it from, copied into the device on the input thread by UpdateInput.
++struct RemoteState
++{
++  u32 buttons = 0;
++  float cursor_x = 0;
++  float cursor_y = 0;
++  float stick_x = 0;
++  float stick_y = 0;
++  float accel_right = 0;
++  float accel_forward = 0;
++  float accel_up = 1;
++  float gyro_pitch = 0;
++  float gyro_roll = 0;
++  float gyro_yaw = 0;
++};
++
++std::mutex s_states_mutex;
++std::array<RemoteState, MAX_REMOTES> s_states;
++
++float Clamp1(float value)
++{
++  return std::clamp(value, -1.0f, 1.0f);
++}
++
++class Device final : public Core::Device
++{
++public:
++  explicit Device(int index) : m_index(index)
++  {
++    // Same names as the Bluetooth passthrough device, so one profile vocabulary serves both.
++    AddButton("A", BUTTON_A);
++    AddButton("B", BUTTON_B);
++    AddButton("1", BUTTON_ONE);
++    AddButton("2", BUTTON_TWO);
++    AddButton("-", BUTTON_MINUS);
++    AddButton("+", BUTTON_PLUS);
++    AddButton("HOME", BUTTON_HOME);
++    AddButton("Up", BUTTON_UP);
++    AddButton("Down", BUTTON_DOWN);
++    AddButton("Left", BUTTON_LEFT);
++    AddButton("Right", BUTTON_RIGHT);
++    AddButton("Shake", BUTTON_SHAKE);
++
++    // Pointing. Screen axes: Y+ is down, as the emulated Wii Remote's IR group expects
++    // (IR/Up binds Cursor Y-).
++    AddAxis("Cursor X-", &m_state.cursor_x, -1);
++    AddAxis("Cursor X+", &m_state.cursor_x, +1);
++    AddAxis("Cursor Y-", &m_state.cursor_y, -1);
++    AddAxis("Cursor Y+", &m_state.cursor_y, +1);
++    AddInput(new CursorHidden(&m_state));
++
++    AddButton("Nunchuk C", BUTTON_NUNCHUK_C);
++    AddButton("Nunchuk Z", BUTTON_NUNCHUK_Z);
++    AddButton("Nunchuk Shake", BUTTON_NUNCHUK_SHAKE);
++    AddAxis("Nunchuk X-", &m_state.stick_x, -1);
++    AddAxis("Nunchuk X+", &m_state.stick_x, +1);
++    AddAxis("Nunchuk Y-", &m_state.stick_y, -1);
++    AddAxis("Nunchuk Y+", &m_state.stick_y, +1);
++
++    // Motion, only meaningful while the page reports it (BUTTON_HAS_MOTION); a profile maps
++    // these when the host has a motion sensor. Undetectable so they never win auto-mapping.
++    AddMotion("Accel Right", &m_state.accel_right, +1);
++    AddMotion("Accel Left", &m_state.accel_right, -1);
++    AddMotion("Accel Forward", &m_state.accel_forward, +1);
++    AddMotion("Accel Backward", &m_state.accel_forward, -1);
++    AddMotion("Accel Up", &m_state.accel_up, +1);
++    AddMotion("Accel Down", &m_state.accel_up, -1);
++    AddMotion("Gyro Pitch Up", &m_state.gyro_pitch, +1);
++    AddMotion("Gyro Pitch Down", &m_state.gyro_pitch, -1);
++    AddMotion("Gyro Roll Right", &m_state.gyro_roll, +1);
++    AddMotion("Gyro Roll Left", &m_state.gyro_roll, -1);
++    AddMotion("Gyro Yaw Left", &m_state.gyro_yaw, +1);
++    AddMotion("Gyro Yaw Right", &m_state.gyro_yaw, -1);
++  }
++
++  std::string GetName() const override { return "Wii Remote"; }
++  std::string GetSource() const override { return std::string(SOURCE_NAME); }
++  std::optional<int> GetPreferredId() const override { return m_index; }
++  // The first remote is the default device a fresh profile binds to.
++  int GetSortPriority() const override { return 10 - m_index; }
++
++  Core::DeviceRemoval UpdateInput() override
++  {
++    std::lock_guard lock(s_states_mutex);
++    m_state = s_states[m_index];
++    return Core::DeviceRemoval::Keep;
++  }
++
++private:
++  class Button final : public Core::Device::Input
++  {
++  public:
++    Button(std::string name, const RemoteState* state, u32 mask)
++        : m_name(std::move(name)), m_state(state), m_mask(mask)
++    {
++    }
++    std::string GetName() const override { return m_name; }
++    ControlState GetState() const override { return (m_state->buttons & m_mask) ? 1 : 0; }
++
++  private:
++    const std::string m_name;
++    const RemoteState* const m_state;
++    const u32 m_mask;
++  };
++
++  // One direction of a signed axis, as the expression language wants it: 0..1.
++  class Axis final : public Core::Device::Input
++  {
++  public:
++    Axis(std::string name, const float* value, float sign)
++        : m_name(std::move(name)), m_value(value), m_sign(sign)
++    {
++    }
++    std::string GetName() const override { return m_name; }
++    ControlState GetState() const override { return std::max(0.0f, Clamp1(*m_value) * m_sign); }
++
++  private:
++    const std::string m_name;
++    const float* const m_value;
++    const float m_sign;
++  };
++
++  // Motion is not confined to -1..1 (g, radians per second) and never wins auto-mapping.
++  class Motion final : public Core::Device::Input
++  {
++  public:
++    Motion(std::string name, const float* value, float sign)
++        : m_name(std::move(name)), m_value(value), m_sign(sign)
++    {
++    }
++    std::string GetName() const override { return m_name; }
++    bool IsDetectable() const override { return false; }
++    ControlState GetState() const override { return std::max(0.0f, *m_value * m_sign); }
++
++  private:
++    const std::string m_name;
++    const float* const m_value;
++    const float m_sign;
++  };
++
++  class CursorHidden final : public Core::Device::Input
++  {
++  public:
++    explicit CursorHidden(const RemoteState* state) : m_state(state) {}
++    std::string GetName() const override { return "Cursor Hidden"; }
++    bool IsDetectable() const override { return false; }
++    ControlState GetState() const override
++    {
++      return (m_state->buttons & BUTTON_CURSOR_VISIBLE) ? 0 : 1;
++    }
++
++  private:
++    const RemoteState* const m_state;
++  };
++
++  void AddButton(const char* name, u32 mask) { AddInput(new Button(name, &m_state, mask)); }
++  void AddAxis(const char* name, const float* value, float sign)
++  {
++    AddInput(new Axis(name, value, sign));
++  }
++  void AddMotion(const char* name, const float* value, float sign)
++  {
++    AddInput(new Motion(name, value, sign));
++  }
++
++  const int m_index;
++  RemoteState m_state;
++};
++
++class InputBackend final : public ciface::InputBackend
++{
++public:
++  using ciface::InputBackend::InputBackend;
++
++  void PopulateDevices() override
++  {
++    for (int index = 0; index < MAX_REMOTES; ++index)
++      GetControllerInterface().AddDevice(std::make_shared<Device>(index));
++  }
++};
++}  // namespace
++
++std::unique_ptr<ciface::InputBackend> CreateInputBackend(ControllerInterface* controller_interface)
++{
++  return std::make_unique<InputBackend>(controller_interface);
++}
++}  // namespace ciface::Web
++
++extern "C" void SetWiimoteState(int index, unsigned int buttons, float cursor_x, float cursor_y,
++                                float stick_x, float stick_y, float accel_right,
++                                float accel_forward, float accel_up, float gyro_pitch,
++                                float gyro_roll, float gyro_yaw)
++{
++  if (index < 0 || index >= ciface::Web::MAX_REMOTES)
++    return;
++
++  ciface::Web::RemoteState next;
++  next.buttons = buttons;
++  next.cursor_x = ciface::Web::Clamp1(cursor_x);
++  next.cursor_y = ciface::Web::Clamp1(cursor_y);
++  next.stick_x = ciface::Web::Clamp1(stick_x);
++  next.stick_y = ciface::Web::Clamp1(stick_y);
++  if (buttons & ciface::Web::BUTTON_HAS_MOTION)
++  {
++    next.accel_right = accel_right;
++    next.accel_forward = accel_forward;
++    next.accel_up = accel_up;
++    next.gyro_pitch = gyro_pitch;
++    next.gyro_roll = gyro_roll;
++    next.gyro_yaw = gyro_yaw;
++  }
++
++  std::lock_guard lock(ciface::Web::s_states_mutex);
++  ciface::Web::s_states[index] = next;
++}
+diff --git a/Source/Core/InputCommon/ControllerInterface/Web/Web.h b/Source/Core/InputCommon/ControllerInterface/Web/Web.h
+new file mode 100644
+index 0000000000..25d6fd4938
+--- /dev/null
++++ b/Source/Core/InputCommon/ControllerInterface/Web/Web.h
+@@ -0,0 +1,61 @@
++// Copyright 2026 Dolphin Emulator Project (wasm-dolphin)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <memory>
++
++#include "InputCommon/ControllerInterface/InputBackend.h"
++
++// The browser's input backend. The page is the only source of input in the wasm build: it
++// reads the keyboard, mouse, touch, gamepads and device motion, and hands the result to the
++// core as the state of up to four Wii Remote shaped devices ("Web/0/Wii Remote" ...), through
++// the exported SetWiimoteState (below). Each device exposes the same input names as the
++// Bluetooth passthrough device (InputCommon/ControllerInterface/Wiimote), so the emulated Wii
++// Remote binds to it with an ordinary WiimoteNew.ini profile and upstream's IR camera, motion
++// and extension emulation run unchanged.
++namespace ciface::Web
++{
++// Bit positions of the `buttons` word SetWiimoteState takes. src/wiimote.js mirrors this.
++enum Button : unsigned int
++{
++  BUTTON_A = 1u << 0,
++  BUTTON_B = 1u << 1,
++  BUTTON_ONE = 1u << 2,
++  BUTTON_TWO = 1u << 3,
++  BUTTON_MINUS = 1u << 4,
++  BUTTON_PLUS = 1u << 5,
++  BUTTON_HOME = 1u << 6,
++  BUTTON_UP = 1u << 7,
++  BUTTON_DOWN = 1u << 8,
++  BUTTON_LEFT = 1u << 9,
++  BUTTON_RIGHT = 1u << 10,
++  BUTTON_NUNCHUK_C = 1u << 11,
++  BUTTON_NUNCHUK_Z = 1u << 12,
++  BUTTON_SHAKE = 1u << 13,
++  BUTTON_NUNCHUK_SHAKE = 1u << 14,
++  // The pointer is over the game: the cursor is pointing at the screen.
++  BUTTON_CURSOR_VISIBLE = 1u << 15,
++  // The page is reporting device motion in the accel/gyro fields.
++  BUTTON_HAS_MOTION = 1u << 16,
++};
++
++constexpr int MAX_REMOTES = 4;
++
++std::unique_ptr<ciface::InputBackend> CreateInputBackend(ControllerInterface* controller_interface);
++}  // namespace ciface::Web
++
++extern "C"
++{
++// Called from the page (through the worker) whenever the state of a Wii Remote changes.
++//   index        0..3
++//   buttons      ciface::Web::Button bits
++//   cursor_x/y   pointer position over the game, -1..1, +x right, +y down (screen axes)
++//   stick_x/y    Nunchuk stick, -1..1, +y up
++//   accel_*      acceleration in g along the remote's right, forward and up axes
++//                (0, 0, 1 when it rests face up); only read with BUTTON_HAS_MOTION
++//   gyro_*       angular speed in radians per second: pitch up, roll right, yaw left
++void SetWiimoteState(int index, unsigned int buttons, float cursor_x, float cursor_y,
++                     float stick_x, float stick_y, float accel_right, float accel_forward,
++                     float accel_up, float gyro_pitch, float gyro_roll, float gyro_yaw);
++}

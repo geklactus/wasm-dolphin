@@ -15,7 +15,8 @@ export const SOFTWARE_TEV_HOT_CASE_MODE = Object.freeze({
 export const ONE_WAY_WORKER_REQUEST_TYPES = Object.freeze([
   "setAudioMuted",
   "setInputMask",
-  "setInputState"
+  "setInputState",
+  "setWiimoteState"
 ]);
 
 const ONE_WAY_WORKER_REQUEST_TYPE_SET = new Set(ONE_WAY_WORKER_REQUEST_TYPES);

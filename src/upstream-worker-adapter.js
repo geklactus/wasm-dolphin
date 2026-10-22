@@ -6,8 +6,11 @@ import {
 } from "./upstream-worker-protocol.js";
 import {
   INPUT_STATE_SLOT_COUNT,
-  writeInputStateSnapshot
+  WIIMOTE_STATE_SLOT_COUNT,
+  writeInputStateSnapshot,
+  writeWiimoteStateSnapshot
 } from "./input-transport.js";
+import { wiimoteStatesEqual } from "./wiimote.js";
 import {
   countTransferBytes,
   createCausalTelemetry,
@@ -269,6 +272,8 @@ export class UpstreamWorkerAdapter {
     this.frameProfileStats = "-";
     this.frameData = null;
     this.lastInputStateSignature = "";
+    this.lastWiimoteState = null;
+    this.wiimoteGeneration = 0;
     this.workerCausalTelemetry = null;
     this.causalTelemetry = null;
     this.trafficStats = {
@@ -293,9 +298,14 @@ export class UpstreamWorkerAdapter {
     if (typeof SharedArrayBuffer === "function") {
       this.inputStateSab = new SharedArrayBuffer(INPUT_STATE_SLOT_COUNT * Int32Array.BYTES_PER_ELEMENT);
       this.inputStateView = new Int32Array(this.inputStateSab);
+      // Wii Remote 1, the same way (src/wiimote.js, input-transport.js).
+      this.wiimoteStateSab = new SharedArrayBuffer(WIIMOTE_STATE_SLOT_COUNT * Int32Array.BYTES_PER_ELEMENT);
+      this.wiimoteStateView = new Int32Array(this.wiimoteStateSab);
     } else {
       this.inputStateSab = null;
       this.inputStateView = null;
+      this.wiimoteStateSab = null;
+      this.wiimoteStateView = null;
     }
   }
 
@@ -407,6 +417,7 @@ export class UpstreamWorkerAdapter {
       inputPhotonDiagnostics: this.inputPhotonDiagnostics,
       inputPhotonMarker: this.inputPhotonMarker,
       inputStateSab: this.inputStateSab,
+      wiimoteStateSab: this.wiimoteStateSab,
       oglPixelSab: this.oglPixelSab,
       oglMetaSab: this.oglMetaSab,
       oglSabWidth: this.oglSabWidth,
@@ -573,6 +584,26 @@ export class UpstreamWorkerAdapter {
       inputGeneration
     });
     this.inputTelemetry.mainPostCount += 1;
+  }
+
+  // Wii Remote 1. Sent only on change, through the shared buffer when there is one and
+  // always through postMessage (the floor when the worker is between SAB polls).
+  setWiimoteState(state) {
+    if (!this.loaded || !state) {
+      return;
+    }
+    if (wiimoteStatesEqual(state, this.lastWiimoteState)) {
+      return;
+    }
+    this.lastWiimoteState = { ...state };
+    let inputGeneration = (this.wiimoteGeneration + 1) >>> 0;
+    if (inputGeneration === 0) inputGeneration = 1;
+    this.wiimoteGeneration = inputGeneration;
+    const inputSentAtEpochMs = Date.now();
+    if (this.wiimoteStateView) {
+      writeWiimoteStateSnapshot(this.wiimoteStateView, { ...state, inputGeneration, sentAtEpochMs: inputSentAtEpochMs });
+    }
+    this.post("setWiimoteState", { ...state, inputGeneration, inputSentAtEpochMs });
   }
 
   runFrame() {

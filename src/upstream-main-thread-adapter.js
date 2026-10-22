@@ -180,6 +180,29 @@ export class UpstreamMainThreadAdapter {
       getVideoStats: optionalCwrap("GetVideoStats", "string", []),
       reset: cwrap("Reset", null, []),
       setInputMask: cwrap("SetInputMask", null, ["number"]),
+      setWiimoteState:
+        typeof module._SetWiimoteState === "function"
+          ? (state) =>
+              ccall(
+                "SetWiimoteState",
+                null,
+                ["number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number"],
+                [
+                  0,
+                  state.buttons >>> 0,
+                  Number(state.cursorX) || 0,
+                  Number(state.cursorY) || 0,
+                  Number(state.stickX) || 0,
+                  Number(state.stickY) || 0,
+                  Number(state.accelRight) || 0,
+                  Number(state.accelForward) || 0,
+                  Number(state.accelUp) || 0,
+                  Number(state.gyroPitch) || 0,
+                  Number(state.gyroRoll) || 0,
+                  Number(state.gyroYaw) || 0
+                ]
+              )
+          : null,
       setInputState:
         typeof module._SetInputState === "function"
           ? (state) =>
@@ -440,6 +463,10 @@ export class UpstreamMainThreadAdapter {
 
   setInputState(state) {
     this.api?.setInputState?.(state);
+  }
+
+  setWiimoteState(state) {
+    this.api?.setWiimoteState?.(state);
   }
 
   readFrameRgba() {

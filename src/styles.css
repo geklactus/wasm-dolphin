@@ -1198,3 +1198,12 @@ body.panel-hidden .workspace {
 .crt-set:fullscreen .crt-footer {
   display: none;
 }
+
+kbd {
+  font: inherit;
+  font-size: 0.9em;
+  padding: 0 0.3em;
+  border: 1px solid currentColor;
+  border-radius: 0.25em;
+  opacity: 0.85;
+}

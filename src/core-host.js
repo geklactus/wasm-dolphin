@@ -640,6 +640,11 @@ export class EmulatorHost {
     this.adapter.setInputState?.(inputState);
   }
 
+  // Wii Remote 1 (src/wiimote.js). Only the Dolphin adapters know what to do with it.
+  setWiimoteState(wiimoteState) {
+    this.adapter.setWiimoteState?.(wiimoteState);
+  }
+
   saveState() {
     if (this.mode === "dolphin") {
       this.adapter.saveState(0);
