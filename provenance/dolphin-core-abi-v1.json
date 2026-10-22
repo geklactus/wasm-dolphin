@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "abiVersion": 1,
-  "coreId": "sha256:86c687f770dbb88a6b5c41958c3d66a8d5d94a717abaaff58a18814c992496a5",
+  "coreId": "sha256:d265bc433ed5c58d8beaeb862fd4634d484eb15aa4cf37eec6e4bb53677b23a6",
   "upstreamCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
   "artifacts": [
     {
       "path": "cores/dolphin/dolphin-core-upstream.js",
       "hashMode": "lf-normalized",
-      "size": 266986,
-      "sha256": "91ed938e1401e10a53bf81d4c66dcfe73b051673ce18f1ad78303730ddbb1969"
+      "size": 267065,
+      "sha256": "f8c1711955ef7343b2db37a38e7e7d41136b4cbd39db58abbd100b706ead500b"
     },
     {
       "path": "cores/dolphin/dolphin-core-upstream.wasm",
-      "size": 13003347,
-      "sha256": "86c687f770dbb88a6b5c41958c3d66a8d5d94a717abaaff58a18814c992496a5"
+      "size": 13220659,
+      "sha256": "d265bc433ed5c58d8beaeb862fd4634d484eb15aa4cf37eec6e4bb53677b23a6"
     }
   ],
   "contractSources": [
@@ -165,7 +165,7 @@
       "path": "src/upstream-worker-protocol.js",
       "hashMode": "lf-normalized",
       "size": 5117,
-      "sha256": "989a9a2e46f1b045249653c761339561119f3ee1cca29482ab8069dc06bcdc9d"
+      "sha256": "7b9d5d07f9d590e2f02ae2004ab8884f498bd0b126f4b66ae2cebfccae2ce0e3"
     },
     {
       "path": "src/wgpu-pass-state-cache.js",
@@ -350,9 +350,7 @@
     }
   },
   "memoryContractStatus": "consistent",
-  "sourceOnlyExportsPendingRebuild": [
-    "_SetWiimoteState"
-  ],
+  "sourceOnlyExportsPendingRebuild": [],
   "moduleExports": [
     "_AcknowledgeWebGpuOwnershipTraceCapture",
     "_AudioBuffer",
@@ -481,6 +479,7 @@
     "_SetWebGpuUploadArenaMiB",
     "_SetWgpuDeepDiagnosticsEnabled",
     "_SetWgpuIdleFifoTailElisionEnabled",
+    "_SetWiimoteState",
     "_SetXfbFastPaths",
     "_StopCore",
     "_TestDcbxLoopPattern",
