@@ -290,7 +290,7 @@ function createDependentLockedPatchFixture() {
 
 test("committed Dolphin provenance and ABI manifests verify", () => {
   const result = verifyDolphinProvenance(projectRoot);
-  assert.equal(result.upstreamCommit, "e22551eae1c84a7e4d0b6a5c519ef4ed4ef69df1");
+  assert.equal(result.upstreamCommit, "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b");
   assert.equal(result.patches.count, loadSourceLock(projectRoot).patches.length);
   assert.equal(Object.keys(result.externalRepositories).length, 2);
   // Tracks the patch series: 110 before the investigation diagnostics were
@@ -298,8 +298,10 @@ test("committed Dolphin provenance and ABI manifests verify", () => {
   // patch, then 109. The cached-interpreter JIT patches added four paths no
   // earlier patch touched -- CachedInterpreterBlockCache.cpp/.h,
   // CachedInterpreterLink.h and WasmDeferredCompileQueue.h -- taking it to
-  // 113. Update deliberately when the series changes what it modifies.
-  assert.equal(result.vendorSnapshot.rootPaths, 113);
+  // 113. The rebase onto Dolphin cf5cb7ef added 0068 (Emscripten
+  // LazyMemoryRegion: MemArena.h and MemArenaUnix.cpp), 115. Update
+  // deliberately when the series changes what it modifies.
+  assert.equal(result.vendorSnapshot.rootPaths, 115);
   assert.equal(result.vendorSnapshot.submodulePaths, 2);
   assert.equal(result.core.abiVersion, 1);
   assert.equal(result.core.memoryContract.jsGlue.initialPages, 24576);

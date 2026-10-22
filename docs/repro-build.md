@@ -20,7 +20,7 @@ version or executable hash mismatch before configuration.
 | Rust target | `wasm32-unknown-emscripten` |
 | Naga | `26.0.0`, with the full Cargo graph locked |
 | Chrome | `149.0.7827.201` for headed diagnostics; record each performance run separately |
-| Upstream Dolphin commit | `e22551eae1c84a7e4d0b6a5c519ef4ed4ef69df1` |
+| Upstream Dolphin commit | `cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b` (master, 2026-10-19) |
 
 The Naga static library uses nightly Rust because its Emscripten pthread build
 rebuilds `std` with atomics and bulk-memory support. Install nightly plus
@@ -132,8 +132,8 @@ baked core:
 
 | Artifact | Canonical size | SHA-256 |
 | --- | ---: | --- |
-| `dolphin-core-upstream.js` | 261,633 normalized bytes | `56c62ffc376806049b3442d66df5b72a8685796e39ab79931282fcb286a3b163` |
-| `dolphin-core-upstream.wasm` | 12,815,061 bytes | `158dde37602442bf1dacf42328501082b46b47768b2455946fcb4c596fcdb5ea` |
+| `dolphin-core-upstream.js` | 266,986 normalized bytes | `91ed938e1401e10a53bf81d4c66dcfe73b051673ce18f1ad78303730ddbb1969` |
+| `dolphin-core-upstream.wasm` | 13,003,347 bytes | `86c687f770dbb88a6b5c41958c3d66a8d5d94a717abaaff58a18814c992496a5` |
 
 The JS digest is calculated after CRLF-to-LF normalization, and
 `.gitattributes` requires LF for core JS files. This prevents checkout line
