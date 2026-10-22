@@ -28,6 +28,41 @@ rebuilds `std` with atomics and bulk-memory support. Install nightly plus
 documented in [the bridge guide](webgpu-naga-bridge.md) when the hardware
 WebGPU shader path is required.
 
+## Linux, and the build-core workflow
+
+The Windows lock above is `provenance/wasm-toolchain.lock.json`; Linux has its own,
+`provenance/wasm-toolchain.linux-x64.lock.json`, with the same versions and commits
+(Rust `nightly-2026-05-15`, which is the pinned rustc). `verify:toolchain` picks the lock
+for the platform it runs on. A new platform lock starts with `null` hashes:
+`npm run record:toolchain` fills them from the installed tools (still checking every
+version and commit), and from then on the hashes are verified like the Windows ones.
+
+`.github/workflows/build-core.yml` builds the core on an `ubuntu-24.04` runner from
+those pins — emsdk at the locked commit, CMake and Ninja from PyPI, the Rust nightly with
+`rust-src` and the Emscripten target — with `ccache` in front of `emcc`
+(`DOLPHIN_WASM_COMPILER_LAUNCHER`, recorded in the configure evidence). It runs on pushes
+to `rebase/**` and `core/**` branches, on pull requests, and by hand. The core, its build
+record and the content-addressed candidate come out as the `dolphin-core` artifact; the
+first run on a lock with `null` hashes also uploads the recorded lock (`toolchain-lock`)
+to commit. Promoting a CI core into `cores/dolphin/` is a commit, as it always was.
+
+## Moving the upstream pin
+
+The patch series is maintained as commits on a branch of `vendor/dolphin` — one commit
+per snapshot patch, subject = the patch file's name without `.patch` — on top of the
+pinned upstream commit. To move the pin: set the new commit in
+`provenance/dolphin-source.lock.json` (`upstream.commit` and `repositories["."].commit`),
+rebase the branch onto it, resolve what conflicts, then
+
+```sh
+npm run export:patches        # rewrites patches/dolphin-wasm/snapshot/ from the branch
+npm run update:provenance     # re-locks the series and the virtual vendor snapshot
+```
+
+and let the workflow build it. The committed core and `provenance/dolphin-core-abi-v1.json`
+still describe the previous pin until a core built from the new one is promoted, so
+`verify:provenance` reports that mismatch in between.
+
 ## Commands
 
 From a clean repository checkout in PowerShell:
