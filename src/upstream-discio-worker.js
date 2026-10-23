@@ -8352,28 +8352,31 @@ function acquireReadbackBuffer(dev, size) {
   }
   return slot;
 }
-function completeReadback(flagPtr, serial) {
-  if (!moduleInstance?.HEAPU8 || !flagPtr) return;
-  const i32 = new Int32Array(moduleInstance.HEAPU8.buffer);
+// The heap is captured when the record is replayed and used for the completion
+// too: a readback resolves on a later event-loop turn, and a pointer into the
+// heap of the module that asked must never be applied to another module's.
+function completeReadback(heapBuffer, flagPtr, serial) {
+  if (!heapBuffer || !flagPtr) return;
+  const i32 = new Int32Array(heapBuffer);
   Atomics.store(i32, flagPtr >>> 2, serial | 0);
   Atomics.notify(i32, flagPtr >>> 2);
 }
-function readbackSerialFor(flagPtr) {
-  if (!moduleInstance?.HEAPU8 || !flagPtr) return 0;
-  const i32 = new Int32Array(moduleInstance.HEAPU8.buffer);
+function readbackSerialFor(heapBuffer, flagPtr) {
+  if (!heapBuffer || !flagPtr) return 0;
+  const i32 = new Int32Array(heapBuffer);
   return Atomics.load(i32, (flagPtr + 4) >>> 2) | 0;
 }
 // Copy `rows` rows of `rowBytes` from a mapped readback buffer (rows padded to
 // `srcStride`) into the heap at `dst`, `dstStride` apart. Returns a promise
 // that resolves once the flag is completed; the slot is released either way.
-function finishReadback(slot, byteLength, rows, rowBytes, srcStride, dst, dstStride,
-                        flagPtr, serial, label) {
+function finishReadback(heapBuffer, slot, byteLength, rows, rowBytes, srcStride, dst,
+                        dstStride, flagPtr, serial, label) {
   slot.busy = true;
   wgpuReadbackStats.requested += 1;
   return slot.buffer.mapAsync(1 /* GPUMapMode.READ */, 0, byteLength).then(() => {
     try {
       const src = new Uint8Array(slot.buffer.getMappedRange(0, byteLength));
-      const heap = new Uint8Array(moduleInstance.HEAPU8.buffer);
+      const heap = new Uint8Array(heapBuffer);
       for (let row = 0; row < rows; row += 1) {
         heap.set(src.subarray(row * srcStride, row * srcStride + rowBytes), dst + row * dstStride);
       }
@@ -8384,7 +8387,7 @@ function finishReadback(slot, byteLength, rows, rowBytes, srcStride, dst, dstStr
     } finally {
       try { slot.buffer.unmap(); } catch {}
       slot.busy = false;
-      completeReadback(flagPtr, serial);
+      completeReadback(heapBuffer, flagPtr, serial);
     }
   }).catch((e) => {
     slot.busy = false;
@@ -8393,7 +8396,7 @@ function finishReadback(slot, byteLength, rows, rowBytes, srcStride, dst, dstStr
     if (wgpuReadbackStats.failed === 1) {
       console.log(`[webgpu-readback] ${label} readback failed: ${e?.message || e}`);
     }
-    completeReadback(flagPtr, serial);
+    completeReadback(heapBuffer, flagPtr, serial);
   });
 }
 
@@ -12358,7 +12361,8 @@ function drainWebGpuCmdRing(source = "presentation") {
           const dst = u32[recWord + 5] >>> 0;
           const dstStride = u32[recWord + 6] >>> 0;
           const flagPtr = u32[recWord + 7] >>> 0;
-          const serial = readbackSerialFor(flagPtr);
+          const heapBuffer = moduleInstance.HEAPU8.buffer;
+          const serial = readbackSerialFor(heapBuffer, flagPtr);
           const rx = xy & 0xFFFF, ry = xy >>> 16;
           const rw = wh & 0xFFFF, rh = wh >>> 16;
           const layer = packed & 0xFF, level = (packed >>> 8) & 0xFF;
@@ -12370,7 +12374,7 @@ function drainWebGpuCmdRing(source = "presentation") {
           if (!t || t.format.startsWith("depth") || rw === 0 || rh === 0 || texel === 0 ||
               !dst || !flagPtr) {
             wgpuReadbackStats.unserved += 1;
-            completeReadback(flagPtr, serial);
+            completeReadback(heapBuffer, flagPtr, serial);
             break;
           }
           endPass("readback", read);
@@ -12386,13 +12390,13 @@ function drainWebGpuCmdRing(source = "presentation") {
           } catch (e) {
             wgpuReadbackStats.failed += 1;
             recordRendererError("readback", `copyTextureToBuffer: ${e?.message || e}`);
-            completeReadback(flagPtr, serial);
+            completeReadback(heapBuffer, flagPtr, serial);
             break;
           }
           // The producer is blocked on this copy: submit now, not at present.
           submitEnc("readback");
-          finishReadback(slot, byteLength, rh, rowBytes, srcStride, dst, dstStride,
-                         flagPtr, serial, "texture");
+          finishReadback(heapBuffer, slot, byteLength, rh, rowBytes, srcStride, dst,
+                         dstStride, flagPtr, serial, "texture");
           break;
         }
         case WGPU_CMD_OP_READBACK_BUFFER: {
@@ -12401,13 +12405,14 @@ function drainWebGpuCmdRing(source = "presentation") {
           const len = u32[recWord + 3] >>> 0;
           const dst = u32[recWord + 4] >>> 0;
           const flagPtr = u32[recWord + 5] >>> 0;
-          const serial = readbackSerialFor(flagPtr);
+          const heapBuffer = moduleInstance.HEAPU8.buffer;
+          const serial = readbackSerialFor(heapBuffer, flagPtr);
           const b = webGpuObjects.buffers.get(bufId);
           const buf = b?.buffer ?? b;
           if (!buf) wgpuReplayClassifier?.recordMissingResource({ kind: "readback-buffer", id: bufId });
           if (!buf || len === 0 || (len & 3) !== 0 || (srcOffset & 3) !== 0 || !dst || !flagPtr) {
             wgpuReadbackStats.unserved += 1;
-            completeReadback(flagPtr, serial);
+            completeReadback(heapBuffer, flagPtr, serial);
             break;
           }
           endPass("readback", read);
@@ -12417,12 +12422,12 @@ function drainWebGpuCmdRing(source = "presentation") {
           } catch (e) {
             wgpuReadbackStats.failed += 1;
             recordRendererError("readback", `copyBufferToBuffer: ${e?.message || e}`);
-            completeReadback(flagPtr, serial);
+            completeReadback(heapBuffer, flagPtr, serial);
             break;
           }
           submitEnc("readback");
-          finishReadback(slot, Math.ceil(len / 256) * 256, 1, len, len, dst, len,
-                         flagPtr, serial, "buffer");
+          finishReadback(heapBuffer, slot, Math.ceil(len / 256) * 256, 1, len, len, dst,
+                         len, flagPtr, serial, "buffer");
           break;
         }
         case WGPU_CMD_OP_SET_SCISSOR:

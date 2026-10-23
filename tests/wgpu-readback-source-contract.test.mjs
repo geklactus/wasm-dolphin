@@ -81,7 +81,7 @@ test("the staging texture reads back through the ring only with the feature on",
 test("the consumer completes every readback it was asked for, served or not", { skip: false }, async () => {
   const worker = await read(workerUrl);
   const tex = worker.slice(worker.indexOf("case WGPU_CMD_OP_READBACK_TEXTURE: {"), worker.indexOf("case WGPU_CMD_OP_READBACK_BUFFER: {"));
-  assert.match(tex, /completeReadback\(flagPtr, serial\);\s*\n\s*break;/, "an unserved texture readback is completed at once");
+  assert.match(tex, /completeReadback\(heapBuffer, flagPtr, serial\);\s*\n\s*break;/, "an unserved texture readback is completed at once");
   assert.match(tex, /copyTextureToBuffer\(/);
   assert.match(tex, /submitEnc\("readback"\);/, "the copy is submitted immediately, not at the next present");
   assert.match(tex, /endPass\("readback", read\);/);
