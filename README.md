@@ -136,6 +136,7 @@ configuration.
 | Frame queue | 4 frames | How many frames the paced presenter buffers before painting. Deeper is smoother but adds latency. | `queue=4` |
 | Pacing | Tick | When the canvas repaints. **Tick** paints each new frame immediately *and* re-paints the last good frame on a steady 16.7ms tick, so the canvas keeps refreshing while the rasterizer repeats frames. | `pacing=tick` |
 | Raster quality | Balanced | How much the software rasterizer and XFB encode are thinned. **Balanced** shades one sample per 2×2 cell; see [Raster quality](#raster-quality-fastsw). | `fastsw=1` |
+| Raster threads | Auto | How many worker threads rasterize alongside the GPU thread on the software renderer. **Auto** sizes it from the machine's core count; *Off* is the single-threaded upstream rasterizer; see [Raster threads](#raster-threads-swthreads). | `swthreads=auto` |
 | JIT tier | Guarded | Which PPC→WASM blocks the JIT is allowed to emit. **Guarded** is the conservative set; *Mixed experimental* widens it (same as `wasmjit=2`). | `jittier=guarded` |
 | WASM JIT | on | The PPC→WASM JIT itself. Off falls back to Dolphin's `CachedInterpreter`. | `wasmjit=1` |
 | Force JIT | off | Bypasses the JIT's safety gates — the warmup-frame floor, and the JIT-off default on the OpenGL path. | `forcejit=1` to enable |
@@ -292,6 +293,29 @@ between neighbors. Mode 1 shades one sample per 2×2 cell; modes 2 and 3 shade
 one per 4×4 cell. None is literal full quality; `fastsw=1` remains the crisp
 default. Results are scene-dependent — see the
 [measured performance audit](docs/performance-audit-2026-07-10.md).
+
+#### Raster threads (`swthreads`)
+
+The software rasterizer is the unique-frame ceiling on this path: with the
+balanced raster, one GPU thread spends roughly 50 ms of shading per Melee frame,
+so the game backs up on the FIFO and only about 13 distinct frames a second come
+out while the emulated clock still reports 60. `?swthreads=` splits that
+shading across worker threads, by horizontal bands of the EFB, inside each draw
+batch. Every pixel is still shaded once, by one thread, in the same order, so
+the output is identical to the single-threaded rasterizer; only the wall time
+changes.
+
+| `swthreads` | What it does |
+|:--:|------|
+| `auto` (default) | `floor(cores / 2) - 2` workers, capped at 4: 0 on a 4-core machine, 2 on an 8-core, 3 on a 10-core, 4 from 12 cores. The CPU thread, the GPU thread and the browser keep their own cores. |
+| `0` | Upstream single-threaded rasterizer. The rollback, and the "before" arm of any A/B. |
+| `1`–`8` | That many workers, whatever the machine reports. |
+
+The GPU thread rasterizes too, so `swthreads=2` means three threads shade. The
+worker count is fixed for the run (**Apply restart** reboots with the new
+value) and the core's video stats carry it as `swthreads:N`. See
+[the software raster threads note](docs/software-raster-threads.md) for the
+profile this came from, the parity argument and how to measure it.
 
 ### Rendering: WebGPU hardware backend (experimental)
 
@@ -463,9 +487,12 @@ tests/                   Node unit tests
 
 - **Crisp *and* smooth is not yet achieved on the software path.** The balanced
   raster (`fastsw=1`) is capped at the rasterizer's unique-frame rate during
-  heavy motion; the fast modes buy smoothness by reducing image quality. The
-  routes to both are fixing hardware WGPU or optimizing, vectorizing, or
-  parallelizing the measured hot software-raster phases.
+  heavy motion; the fast modes buy smoothness by reducing image quality.
+  [Raster threads](#raster-threads-swthreads) raise that ceiling in proportion
+  to the cores the machine can spare, but the per-vertex transform, FIFO
+  decode and XFB encode still run on the one GPU thread, so the ceiling is
+  not gone. The routes to the rest are fixing hardware WGPU or vectorizing and
+  parallelizing the remaining measured software-raster phases.
 - **The WebGPU hardware renderer is GPU- and title-dependent** — verify on your
   target GPU before relying on it; it renders black or misplaces viewports on
   some combinations.
@@ -515,7 +542,7 @@ built from. The core `.wasm` in this repository is built from:
 - upstream Dolphin at commit
   [`cf5cb7ef`](https://github.com/dolphin-emu/dolphin/commit/cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b)
   (master, 2026-10-19),
-- plus the 71 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
+- plus the 72 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
 - plus the C-ABI shim in [`core/upstream/`](core/upstream) and the build driver
   in [`tools/`](tools).
 

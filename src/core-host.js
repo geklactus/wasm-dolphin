@@ -7,6 +7,7 @@ import {
   DEFAULT_UPSTREAM_CORE_URL,
   requestedLegacyOneWayAck,
   requestedSoftwareTevHotCaseMode,
+  requestedSoftwareRasterThreads,
   requestedXfbFastPaths,
   requestedUpstreamCoreBuild
 } from "./upstream-worker-protocol.js";
@@ -99,6 +100,7 @@ export class EmulatorHost {
     this.oglProxyMode = requestedOglProxyMode();
     this.oglTestClear = requestedOglTestClear();
     this.fastSoftwareRaster = requestedFastSoftwareRaster();
+    this.softwareRasterThreads = requestedSoftwareRasterThreads(window.location.search);
     this.softwareTevHotCaseMode = requestedSoftwareTevHotCaseMode(window.location.search);
     this.xfbFastPaths = requestedXfbFastPaths(window.location.search);
     this.correctTimeDrift = requestedCorrectTimeDrift();
@@ -338,6 +340,7 @@ export class EmulatorHost {
             presentationScale: this.presentationScale,
             oglTestClear: this.oglTestClear,
             fastSoftwareRaster: this.fastSoftwareRaster,
+            softwareRasterThreads: this.softwareRasterThreads,
             xfbFastPaths: this.xfbFastPaths,
             gameProfile: this.gameProfile,
             rendererFeatureOverrides: this.rendererFeatureOverrides
@@ -391,6 +394,7 @@ export class EmulatorHost {
             oglProxyMode: this.oglProxyMode,
             oglTestClear: this.oglTestClear,
             fastSoftwareRaster: this.fastSoftwareRaster,
+            softwareRasterThreads: this.softwareRasterThreads,
             softwareTevHotCaseMode: this.softwareTevHotCaseMode,
             xfbFastPaths: this.xfbFastPaths,
             correctTimeDrift: this.correctTimeDrift,

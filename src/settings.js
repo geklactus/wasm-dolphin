@@ -14,6 +14,7 @@ export const PLAYABLE_PRESET = Object.freeze({
   oc: "1",
   queue: "4",
   fastsw: "1",
+  swthreads: "auto",
   metrics: "0"
 });
 
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   forcejit: "0",
   queue: "4",
   fastsw: "1",
+  swthreads: "auto",
   metrics: "0"
 });
 
@@ -48,6 +50,7 @@ const CHOICE_SETS = Object.freeze({
   forcejit: new Set(["0", "1"]),
   queue: new Set(["2", "4", "8", "12"]),
   fastsw: new Set(["0", "1", "2", "3"]),
+  swthreads: new Set(["auto", "0", "1", "2", "3", "4"]),
   metrics: new Set(["0", "1"])
 });
 
@@ -70,6 +73,7 @@ export function readSettingsFromSearch(search) {
     forcejit: params.get("forcejit") === "1" ? "1" : DEFAULT_SETTINGS.forcejit,
     queue: normalizeChoice("queue", params.get("queue") || DEFAULT_SETTINGS.queue),
     fastsw: normalizeChoice("fastsw", params.get("fastsw") || DEFAULT_SETTINGS.fastsw),
+    swthreads: normalizeChoice("swthreads", normalizeSwThreads(params.get("swthreads"))),
     metrics: params.get("metrics") === "1" ? "1" : DEFAULT_SETTINGS.metrics
   };
 }
@@ -96,6 +100,7 @@ export function buildSettingsHref(href, settings) {
   writeSetting(url.searchParams, "forcejit", nextSettings.forcejit, DEFAULT_SETTINGS.forcejit);
   writeSetting(url.searchParams, "queue", nextSettings.queue, DEFAULT_SETTINGS.queue);
   writeSetting(url.searchParams, "fastsw", nextSettings.fastsw, DEFAULT_SETTINGS.fastsw);
+  writeSetting(url.searchParams, "swthreads", nextSettings.swthreads, DEFAULT_SETTINGS.swthreads);
   writeSetting(url.searchParams, "metrics", nextSettings.metrics, DEFAULT_SETTINGS.metrics);
   url.searchParams.delete("unsafejitwarmup");
   if (nextSettings.wasmjit === "0") {
@@ -176,6 +181,18 @@ function normalizePresenter(value) {
   }
 
   return value || DEFAULT_SETTINGS.presenter;
+}
+
+// The URL accepts any count up to 8 (see requestedSoftwareRasterThreads); the panel offers the
+// counts that make sense on a desktop. Larger explicit values show as "4" in the panel but are
+// still honoured by the worker.
+function normalizeSwThreads(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "" || text === "auto") return "auto";
+  if (text === "off" || text === "none") return "0";
+  const count = Number.parseInt(text, 10);
+  if (!Number.isFinite(count)) return "auto";
+  return String(Math.max(0, Math.min(4, count)));
 }
 
 function normalizeOglProxy(value) {

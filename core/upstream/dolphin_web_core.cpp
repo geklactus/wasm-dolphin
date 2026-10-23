@@ -48,12 +48,19 @@
 
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 
+#include "VideoBackends/Software/NativeVertexFormat.h"
+#include "VideoBackends/Software/Rasterizer.h"
+#include "VideoBackends/Software/SWEfbInterface.h"
+#include "VideoCommon/BPMemory.h"
 #include "VideoCommon/Fifo.h"
 #include "VideoCommon/Statistics.h"
 #include "VideoCommon/VideoBackendBase.h"
+#include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
+#include "VideoCommon/XFMemory.h"
 
 extern "C" void DolphinWeb_SetFastSoftwareRaster(int mode);
+extern "C" void DolphinWeb_SetSoftwareRasterThreads(int count);
 extern "C" std::uint32_t DolphinWeb_SetCachedInterpreterDisableMask(std::uint32_t mask);
 extern "C" std::uint32_t DolphinWeb_GetCachedInterpreterDisableMask();
 extern "C" unsigned int DolphinWeb_SetRendererFeatureMask(unsigned int mask);
@@ -877,6 +884,203 @@ std::unique_ptr<GBAHostInterface> Host_CreateGBAHost(std::weak_ptr<HW::GBA::Core
   return nullptr;
 }
 
+
+// ---------------------------------------------------------------------------
+// Software raster threads parity smoke (docs/software-raster-threads.md).
+//
+// Drives the software rasterizer directly with a deterministic synthetic scene: no disc, no
+// FIFO, no vertex loader. The scene mixes triangle sizes (slivers inside one band to fans that
+// span the whole EFB), partly off-screen triangles, culled-only z-slope updates, zfreeze on and
+// off, early and late depth testing, and colour-write-disabled batches, so every ordering and
+// banding hazard the band-parallel rasterizer has to respect is exercised. The EFB hash it
+// returns must be identical whatever worker count was requested; that is the parity evidence.
+namespace
+{
+struct SmokeRng
+{
+  std::uint32_t state;
+  std::uint32_t Next()
+  {
+    state = state * 1664525u + 1013904223u;
+    return state;
+  }
+  float Unit() { return static_cast<float>(Next() >> 8) * (1.0f / 16777216.0f); }
+  float Range(float low, float high) { return low + (high - low) * Unit(); }
+  std::uint32_t Below(std::uint32_t n)
+  {
+    return static_cast<std::uint32_t>((static_cast<std::uint64_t>(Next()) * n) >> 32);
+  }
+};
+
+// GX adds 342 to scissor and viewport coordinates; the rasterizer subtracts it again.
+constexpr float SMOKE_GX_OFFSET = 342.0f;
+constexpr int SMOKE_WIDTH = 640;
+constexpr int SMOKE_HEIGHT = 480;
+
+void ConfigureSmokeRasterState(bool zfreeze, bool early_z, bool color_update, CompareMode zfunc)
+{
+  bpmem.genMode.hex = 0;
+  bpmem.genMode.numtexgens = 0;
+  bpmem.genMode.numcolchans = 1;
+  bpmem.genMode.numtevstages = 0;  // one stage
+  bpmem.genMode.numindstages = 0;
+  bpmem.genMode.cull_mode = CullMode::None;
+  bpmem.genMode.zfreeze = zfreeze;
+
+  bpmem.zmode.hex = 0;
+  bpmem.zmode.test_enable = true;
+  bpmem.zmode.func = zfunc;
+  bpmem.zmode.update_enable = true;
+
+  bpmem.blendmode.hex = 0;
+  bpmem.blendmode.color_update = color_update;
+  bpmem.blendmode.alpha_update = true;
+
+  bpmem.zcontrol.hex = 0;
+  bpmem.zcontrol.early_ztest = early_z;
+
+  bpmem.alpha_test.hex = 0;
+  bpmem.alpha_test.comp0 = CompareMode::Always;
+  bpmem.alpha_test.comp1 = CompareMode::Always;
+  bpmem.alpha_test.logic = AlphaTestOp::And;
+
+  bpmem.ztex2.hex = 0;
+  bpmem.fog.c_proj_fsel.hex = 0;
+
+  // Stage 0 passes the rasterized colour and alpha straight through.
+  auto& cc = bpmem.combiners[0].colorC;
+  cc.hex = 0;
+  cc.a = TevColorArg::Zero;
+  cc.b = TevColorArg::Zero;
+  cc.c = TevColorArg::Zero;
+  cc.d = TevColorArg::RasColor;
+  cc.bias = TevBias::Zero;
+  cc.op = TevOp::Add;
+  cc.clamp = true;
+  cc.scale = TevScale::Scale1;
+  cc.dest = TevOutput::Prev;
+  auto& ac = bpmem.combiners[0].alphaC;
+  ac.hex = 0;
+  ac.a = TevAlphaArg::Zero;
+  ac.b = TevAlphaArg::Zero;
+  ac.c = TevAlphaArg::Zero;
+  ac.d = TevAlphaArg::RasAlpha;
+  ac.bias = TevBias::Zero;
+  ac.op = TevOp::Add;
+  ac.clamp = true;
+  ac.scale = TevScale::Scale1;
+  ac.dest = TevOutput::Prev;
+
+  bpmem.tevorders[0].hex = 0;
+  bpmem.tevorders[0].enable_tex_even = false;
+  bpmem.tevorders[0].colorchan_even = RasColorChan::Color0;
+
+  // Identity swap table 0 (the GX default); zeroed tables would read red into every channel.
+  bpmem.tevksel.ksel[0].hex = 0;
+  bpmem.tevksel.ksel[0].swap_rb = ColorChannel::Red;
+  bpmem.tevksel.ksel[0].swap_ga = ColorChannel::Green;
+  bpmem.tevksel.ksel[1].hex = 0;
+  bpmem.tevksel.ksel[1].swap_rb = ColorChannel::Blue;
+  bpmem.tevksel.ksel[1].swap_ga = ColorChannel::Alpha;
+
+  // A 640x480 scissor at the usual GX offset, one rectangle, x_off = y_off = 342.
+  bpmem.scissorTL.hex = 0;
+  bpmem.scissorTL.x = 342;
+  bpmem.scissorTL.y = 342;
+  bpmem.scissorBR.hex = 0;
+  bpmem.scissorBR.x = 342 + SMOKE_WIDTH - 1;
+  bpmem.scissorBR.y = 342 + SMOKE_HEIGHT - 1;
+  bpmem.scissorOffset.hex = 0;
+  bpmem.scissorOffset.x = 171;
+  bpmem.scissorOffset.y = 171;
+  xfmem.viewport.wd = SMOKE_WIDTH / 2.0f;
+  xfmem.viewport.ht = -SMOKE_HEIGHT / 2.0f;
+  xfmem.viewport.xOrig = SMOKE_GX_OFFSET + SMOKE_WIDTH / 2.0f;
+  xfmem.viewport.yOrig = SMOKE_GX_OFFSET + SMOKE_HEIGHT / 2.0f;
+  xfmem.viewport.zRange = 16777215.0f;
+  xfmem.viewport.farZ = 16777215.0f;
+  Rasterizer::ScissorChanged();
+}
+
+OutputVertexData SmokeVertex(SmokeRng& rng, float x, float y)
+{
+  OutputVertexData v{};
+  v.screenPosition.x = SMOKE_GX_OFFSET + x;
+  v.screenPosition.y = SMOKE_GX_OFFSET + y;
+  v.screenPosition.z = rng.Range(0.0f, 16777215.0f);
+  v.projectedPosition.w = rng.Range(0.5f, 4.0f);
+  for (auto& channel : v.color)
+  {
+    for (u8& component : channel)
+      component = static_cast<u8>(rng.Next() >> 24);
+  }
+  return v;
+}
+
+// Three vertices around a centre, with a non-degenerate area. Sizes span a few pixels (inside
+// one band) to the whole screen (every band), and centres run past the EFB edges so the
+// scissor clamp is exercised too.
+bool SmokeTriangle(SmokeRng& rng, std::array<OutputVertexData, 3>* out)
+{
+  const std::uint32_t size_class = rng.Below(10);
+  const float size = size_class < 3 ? rng.Range(2.0f, 12.0f) :
+                     size_class < 7 ? rng.Range(20.0f, 120.0f) :
+                                      rng.Range(150.0f, 600.0f);
+  const float cx = rng.Range(-40.0f, SMOKE_WIDTH + 40.0f);
+  const float cy = rng.Range(-40.0f, SMOKE_HEIGHT + 40.0f);
+  float xs[3];
+  float ys[3];
+  for (int i = 0; i < 3; ++i)
+  {
+    xs[i] = cx + size * rng.Range(-1.0f, 1.0f);
+    ys[i] = cy + size * rng.Range(-1.0f, 1.0f);
+  }
+  const float cross = (xs[1] - xs[0]) * (ys[2] - ys[0]) - (xs[2] - xs[0]) * (ys[1] - ys[0]);
+  if (std::fabs(cross) < 1.0f)
+    return false;
+  for (int i = 0; i < 3; ++i)
+    (*out)[i] = SmokeVertex(rng, xs[i], ys[i]);
+  return true;
+}
+
+std::uint32_t HashSmokeEfb()
+{
+  std::uint32_t hash = 2166136261u;
+  const auto mix = [&hash](const u8* bytes, std::size_t count) {
+    for (std::size_t i = 0; i < count; ++i)
+    {
+      hash ^= bytes[i];
+      hash *= 16777619u;
+    }
+  };
+  for (u16 y = 0; y < EFB_HEIGHT; ++y)
+  {
+    for (u16 x = 0; x < EFB_WIDTH; ++x)
+    {
+      mix(EfbInterface::GetPixelPointer(x, y, false), 3);
+      mix(EfbInterface::GetPixelPointer(x, y, true), 3);
+    }
+  }
+  return hash;
+}
+
+void ClearSmokeEfb()
+{
+  // SetColor and SetDepth honour the colour/alpha/depth write enables, so the registers must
+  // be on before the clear (a fresh process has them zero, and then nothing is cleared).
+  ConfigureSmokeRasterState(false, false, true, CompareMode::LEqual);
+  u8 clear_color[4] = {0, 0, 0, 0};
+  for (u16 y = 0; y < EFB_HEIGHT; ++y)
+  {
+    for (u16 x = 0; x < EFB_WIDTH; ++x)
+    {
+      EfbInterface::SetColor(x, y, clear_color);
+      EfbInterface::SetDepth(x, y, 0x00ffffffu);
+    }
+  }
+}
+}  // namespace
+
 extern "C"
 {
 int CoreInit()
@@ -1440,5 +1644,98 @@ int RunPpcWasmIntegerBlockSmoke()
                  ppc_state.npc == next_pc && ppc_state.downcount == 96 ?
              1 :
              0;
+}
+// Software raster threads parity smoke. Init picks the worker count and the fastsw mode and
+// starts the pool (the browser and Node start pthreads asynchronously: poll Started until it
+// reaches the request before Run, or the GPU thread will simply draw everything itself). Run
+// draws the deterministic scene for `seed` and returns the EFB hash, which must not depend on
+// the worker count. The rasterizer latches the fastsw mode on its first pixel, so one module
+// instance can only ever test one mode; Init returns -1 if asked to change it.
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+int SoftwareRasterThreadsSmokeInit(int workers, int fast_software_raster)
+{
+  static int s_smoke_fast_software_raster = -1;
+  EnsureRuntime();
+  if (s_smoke_fast_software_raster < 0)
+  {
+    s_smoke_fast_software_raster = fast_software_raster;
+    DolphinWeb_SetFastSoftwareRaster(fast_software_raster);
+  }
+  else if (s_smoke_fast_software_raster != fast_software_raster)
+  {
+    return -1;
+  }
+  DolphinWeb_SetSoftwareRasterThreads(workers);
+  Rasterizer::Init();
+  return Rasterizer::ActiveWorkerThreads();
+}
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+int SoftwareRasterThreadsSmokeStarted()
+{
+  return Rasterizer::StartedWorkerThreads();
+}
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+unsigned int SoftwareRasterThreadsSmokeRun(int seed, int batches)
+{
+  SmokeRng rng{static_cast<std::uint32_t>(seed) * 2654435761u + 12345u};
+  ClearSmokeEfb();
+  const int batch_count = std::max(1, batches);
+  for (int batch = 0; batch < batch_count; ++batch)
+  {
+    // The first batch leaves zfreeze off so the frozen slope always comes from a drawn triangle.
+    const bool zfreeze = batch > 0 && batch % 3 == 2;
+    const bool early_z = (batch & 1) != 0;
+    const bool color_update = batch % 7 != 6;
+    const CompareMode zfunc = batch % 5 == 4 ? CompareMode::Always : CompareMode::LEqual;
+    ConfigureSmokeRasterState(zfreeze, early_z, color_update, zfunc);
+
+    Rasterizer::BeginBatch();
+    Rasterizer::SetTevKonstColors();
+    Rasterizer::ClassifyTevHotCase();
+    // Every fourth batch is large enough to go parallel; the rest are mostly small, so both
+    // the inline path and the band path run, interleaved, against the same EFB.
+    const std::uint32_t triangles = batch % 4 == 0 ? 24 + rng.Below(40) : 1 + rng.Below(6);
+    for (std::uint32_t i = 0; i < triangles; ++i)
+    {
+      std::array<OutputVertexData, 3> tri;
+      if (!SmokeTriangle(rng, &tri))
+        continue;
+      if (rng.Below(8) == 0)
+      {
+        // A culled triangle: the clipper still feeds its slope to zfreeze.
+        Rasterizer::UpdateZSlope(&tri[0], &tri[1], &tri[2], 342, 342);
+        continue;
+      }
+      Rasterizer::DrawTriangleFrontFace(&tri[0], &tri[1], &tri[2]);
+    }
+    Rasterizer::EndBatch();
+  }
+  return HashSmokeEfb();
+}
+
+// Bands the worker threads (not the GPU thread) have drawn since Init, as a double word.
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+double SoftwareRasterThreadsSmokeWorkerBands()
+{
+  return static_cast<double>(Rasterizer::WorkerBandsProcessed());
+}
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+int SoftwareRasterThreadsSmokeShutdown()
+{
+  Rasterizer::Shutdown();
+  return Rasterizer::ActiveWorkerThreads();
 }
 }

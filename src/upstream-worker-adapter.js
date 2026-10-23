@@ -59,6 +59,7 @@ export class UpstreamWorkerAdapter {
     oglProxyMode = "worker",
     oglTestClear = false,
     fastSoftwareRaster = 0,
+    softwareRasterThreads = "auto",
     softwareTevHotCaseMode = 0,
     xfbFastPaths = 0,
     correctTimeDrift = false,
@@ -157,6 +158,7 @@ export class UpstreamWorkerAdapter {
     this.oglProxyMode = oglProxyMode;
     this.oglTestClear = Boolean(oglTestClear);
     this.fastSoftwareRaster = Math.min(3, Math.max(0, Number(fastSoftwareRaster) || 0));
+    this.softwareRasterThreads = softwareRasterThreads;
     this.softwareTevHotCaseMode = (Number(softwareTevHotCaseMode) || 0) & 3;
     this.xfbFastPaths = (Number(xfbFastPaths) || 0) & 3;
     this.correctTimeDrift = Boolean(correctTimeDrift);
@@ -368,6 +370,7 @@ export class UpstreamWorkerAdapter {
       oglProxyMode: this.oglProxyMode,
       oglTestClear: this.oglTestClear,
       fastSoftwareRaster: this.fastSoftwareRaster,
+      softwareRasterThreads: this.softwareRasterThreads,
       softwareTevHotCaseMode: this.softwareTevHotCaseMode,
       xfbFastPaths: this.xfbFastPaths,
       correctTimeDrift: this.correctTimeDrift,
