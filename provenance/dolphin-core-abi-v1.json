@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "abiVersion": 1,
-  "coreId": "sha256:3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c",
+  "coreId": "sha256:54bd60e553170f08c01434a7de32fd03825f7ebd9aec1993765b3a9562eae45a",
   "upstreamCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
   "artifacts": [
     {
       "path": "cores/dolphin/dolphin-core-upstream.js",
       "hashMode": "lf-normalized",
       "size": 267323,
-      "sha256": "e548d03f1e6fc27225df17390982c382e20f5e177118781c9382b05df70a549c"
+      "sha256": "d605d91f2af1010bfb8899e9be0355106e80760103c5ac80ad76f88b65db8b31"
     },
     {
       "path": "cores/dolphin/dolphin-core-upstream.wasm",
-      "size": 13219953,
-      "sha256": "3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c"
+      "size": 13226545,
+      "sha256": "54bd60e553170f08c01434a7de32fd03825f7ebd9aec1993765b3a9562eae45a"
     }
   ],
   "contractSources": [
@@ -165,7 +165,7 @@
       "path": "src/upstream-worker-protocol.js",
       "hashMode": "lf-normalized",
       "size": 5117,
-      "sha256": "9f548b9d98a6888c703747c840ed6afe205ccb714a900661a0b6d3be8d3cfeec"
+      "sha256": "b08530d4755b8409c29dbcb805a76f554efb843c9a86531d37408d3dece3a144"
     },
     {
       "path": "src/wgpu-pass-state-cache.js",

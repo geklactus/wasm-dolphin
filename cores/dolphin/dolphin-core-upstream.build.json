@@ -1,14 +1,11 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-10-23T11:25:42.216Z",
-  "coreId": "sha256:3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c",
+  "createdAt": "2026-10-23T11:47:16.018Z",
+  "coreId": "sha256:54bd60e553170f08c01434a7de32fd03825f7ebd9aec1993765b3a9562eae45a",
   "repository": {
-    "commit": "e0c31b2ad0c13c5377bc20f594dc679258c8de1d",
-    "status": "M cores/dolphin/dolphin-core-upstream.js\n M cores/dolphin/dolphin-core-upstream.wasm\n M provenance/wasm-toolchain.linux-x64.lock.json",
-    "cleanTree": false,
-    "dirtyBuildOverride": [
-      "provenance/wasm-toolchain.linux-x64.lock.json"
-    ]
+    "commit": "2b1c8759ef65c0545db4eaee47745e3d4e06e052",
+    "status": "M cores/dolphin/dolphin-core-upstream.js\n M cores/dolphin/dolphin-core-upstream.wasm",
+    "cleanTree": true
   },
   "source": {
     "upstreamCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
@@ -52,7 +49,7 @@
   },
   "toolchain": {
     "lock": "provenance/wasm-toolchain.linux-x64.lock.json",
-    "lockSha256": "a9d1a606e9cf1c22b7d3de77e3e96a2a317cc735aa4e16e58eec627935fbba38",
+    "lockSha256": "0b0ff5c73b3bb7f66084503e572dfb7ac0822079f28e853cfa0c71ee0130eee8",
     "emscriptenVersion": "5.0.7",
     "emscriptenCompilerCommit": "263db4cffa6f9fc2ec514a70abac81362ea41849",
     "emsdkCommit": "bafd64c26bdaf10bd829163d1575b50b759a72d8",
@@ -65,23 +62,24 @@
     "cargoLockSha256": "1f9dbc6ae36abff7af42626c17fb899275bcd7e134d36ec24a78ef79c8c4ce78"
   },
   "configure": {
-    "buildDir": "/home/user/wasm-dolphin/build/dolphin-wasm",
-    "outputDir": "/home/user/wasm-dolphin/cores/dolphin",
-    "nagaLibrarySha256": "24e367d8c2c917caee68c745a1a8a8c4aa056a983c3c55cf97e4e3f1adf9b852",
+    "buildDir": "/home/runner/work/wasm-dolphin/wasm-dolphin/build/dolphin-wasm",
+    "outputDir": "/home/runner/work/wasm-dolphin/wasm-dolphin/cores/dolphin",
+    "nagaLibrarySha256": "a3f29489b0f77b6d2f049f78e5b30827a3f99afc88b8c6add2452cd1f0902561",
     "wasmMemoryPages": 24576,
     "fastBranchInline": "1",
     "fallbackMapDiagnostics": "0",
     "fallbackMapBits": "16",
     "directWasmBlockDispatch": "0",
+    "compilerLauncher": "ccache",
     "wasmCompileFlags": "-O3 -pthread -msimd128 -flto -DXXH_VECTOR=0 -DDOLPHIN_WEB_HOT_COUNTERS=0 -DDOLPHIN_WEB_INLINE_FAST_BRANCH=1 -DDOLPHIN_WEB_FALLBACK_MAP_DIAGNOSTICS=0 -DDOLPHIN_WEB_FALLBACK_MAP_BITS=16 -DDOLPHIN_WEB_DIRECT_WASM_BLOCK_DISPATCH=0",
     "cmakeArgs": [
-      "/root/.local/bin/cmake",
+      "/opt/hostedtoolcache/Python/3.12.15/x64/bin/cmake",
       "-S",
-      "/home/user/wasm-dolphin/vendor/dolphin",
+      "/home/runner/work/wasm-dolphin/wasm-dolphin/vendor/dolphin",
       "-B",
-      "/home/user/wasm-dolphin/build/dolphin-wasm",
+      "/home/runner/work/wasm-dolphin/wasm-dolphin/build/dolphin-wasm",
       "-GNinja",
-      "-DCMAKE_MAKE_PROGRAM=/root/.local/bin/ninja",
+      "-DCMAKE_MAKE_PROGRAM=/opt/hostedtoolcache/Python/3.12.15/x64/bin/ninja",
       "-DCMAKE_BUILD_TYPE=Release",
       "-DCMAKE_TRY_COMPILE_CONFIGURATION=Debug",
       "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
@@ -121,29 +119,31 @@
       "-DCMAKE_CXX_FLAGS:STRING=-O3 -pthread -msimd128 -flto -DXXH_VECTOR=0 -DDOLPHIN_WEB_HOT_COUNTERS=0 -DDOLPHIN_WEB_INLINE_FAST_BRANCH=1 -DDOLPHIN_WEB_FALLBACK_MAP_DIAGNOSTICS=0 -DDOLPHIN_WEB_FALLBACK_MAP_BITS=16 -DDOLPHIN_WEB_DIRECT_WASM_BLOCK_DISPATCH=0",
       "-DCMAKE_C_FLAGS_DEBUG:STRING=-O0 -fno-lto",
       "-DCMAKE_CXX_FLAGS_DEBUG:STRING=-O0 -fno-lto",
-      "-DDOLPHIN_WASM_NAGA_WGSL_LIB=/home/user/wasm-dolphin/tools/naga-spirv-wgsl/target/wasm32-unknown-emscripten/release/libnaga_spirv_wgsl.a",
-      "-DDOLPHIN_WASM_JIT_CACHE_PRE_JS=/home/user/wasm-dolphin/tools/jit-cache-prejs.js",
+      "-DDOLPHIN_WASM_NAGA_WGSL_LIB=/home/runner/work/wasm-dolphin/wasm-dolphin/tools/naga-spirv-wgsl/target/wasm32-unknown-emscripten/release/libnaga_spirv_wgsl.a",
+      "-DDOLPHIN_WASM_JIT_CACHE_PRE_JS=/home/runner/work/wasm-dolphin/wasm-dolphin/tools/jit-cache-prejs.js",
       "-DDOLPHIN_WASM_MEMORY_PAGES=24576",
-      "-DDOLPHIN_WASM_PROJECT_ROOT=/home/user/wasm-dolphin",
-      "-DDOLPHIN_WASM_BRIDGE_SOURCE=/home/user/wasm-dolphin/core/upstream/dolphin_web_discio.cpp",
-      "-DDOLPHIN_WASM_SHARED_SOURCE_DIR=/home/user/wasm-dolphin/core/upstream",
-      "-DDOLPHIN_WASM_OUTPUT_DIR=/home/user/wasm-dolphin/cores/dolphin",
-      "-DDOLPHIN_WASM_CORE_SOURCE=/home/user/wasm-dolphin/core/upstream/dolphin_web_core.cpp",
-      "-DDOLPHIN_WASM_OUTPUT_DIR=/home/user/wasm-dolphin/cores/dolphin"
+      "-DDOLPHIN_WASM_PROJECT_ROOT=/home/runner/work/wasm-dolphin/wasm-dolphin",
+      "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+      "-DDOLPHIN_WASM_BRIDGE_SOURCE=/home/runner/work/wasm-dolphin/wasm-dolphin/core/upstream/dolphin_web_discio.cpp",
+      "-DDOLPHIN_WASM_SHARED_SOURCE_DIR=/home/runner/work/wasm-dolphin/wasm-dolphin/core/upstream",
+      "-DDOLPHIN_WASM_OUTPUT_DIR=/home/runner/work/wasm-dolphin/wasm-dolphin/cores/dolphin",
+      "-DDOLPHIN_WASM_CORE_SOURCE=/home/runner/work/wasm-dolphin/wasm-dolphin/core/upstream/dolphin_web_core.cpp",
+      "-DDOLPHIN_WASM_OUTPUT_DIR=/home/runner/work/wasm-dolphin/wasm-dolphin/cores/dolphin"
     ],
-    "cmakeCacheSha256": "eead5ff5f76aea393ad1e6fa6691c3c38232d0217bba5f3052284d18e7070011"
+    "cmakeCacheSha256": "c600b653ff8f83bebdc272a990a2feadcd55a718ca8505ce82b246829a47758b"
   },
   "artifacts": {
     "js": {
-      "path": "/home/user/wasm-dolphin/cores/dolphin/dolphin-core-upstream.js",
+      "path": "/home/runner/work/wasm-dolphin/wasm-dolphin/cores/dolphin/dolphin-core-upstream.js",
       "size": 267323,
-      "sha256": "e548d03f1e6fc27225df17390982c382e20f5e177118781c9382b05df70a549c",
+      "sha256": "d605d91f2af1010bfb8899e9be0355106e80760103c5ac80ad76f88b65db8b31",
       "hashMode": "lf-normalized"
     },
     "wasm": {
-      "path": "/home/user/wasm-dolphin/cores/dolphin/dolphin-core-upstream.wasm",
-      "size": 13219953,
-      "sha256": "3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c",
+      "path": "/home/runner/work/wasm-dolphin/wasm-dolphin/cores/dolphin/dolphin-core-upstream.wasm",
+      "size": 13226545,
+      "sha256": "54bd60e553170f08c01434a7de32fd03825f7ebd9aec1993765b3a9562eae45a",
       "hashMode": "raw"
     },
     "wasmSections": [
@@ -170,7 +170,7 @@
       {
         "id": 6,
         "size": 49,
-        "sha256": "b9c90354ca7515a0f6acba7a21d571b1cfb48a78540a1258ce3a84993f838314"
+        "sha256": "58f75091366f36754d54aa2826ae99982698f6e1bc44292f2cb4052e5af8a282"
       },
       {
         "id": 7,
@@ -195,12 +195,12 @@
       {
         "id": 10,
         "size": 10684694,
-        "sha256": "c6552c651c000df5dd70366b7d72cd9a613b197cc32e82856202c62935ae1d36"
+        "sha256": "b490f76905bfe8cdd1ef023128f35641e907e6e3dd187896cd66fd6adbfb0ee2"
       },
       {
         "id": 11,
-        "size": 2492326,
-        "sha256": "e90d65d4a17066afb992c696e03199f6baa97e3a2e140a6b46bf98ff7531cbd7"
+        "size": 2498918,
+        "sha256": "7595d5f87f61e35b9eec207e9f9b3c8fd9644e5d09a2ab41a001706c4da94bdc"
       }
     ]
   }
