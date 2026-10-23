@@ -36,6 +36,10 @@ The Windows lock above is `provenance/wasm-toolchain.lock.json`; Linux has its o
 for the platform it runs on. A new platform lock starts with `null` hashes:
 `npm run record:toolchain` fills them from the installed tools (still checking every
 version and commit), and from then on the hashes are verified like the Windows ones.
+The hashes cover what shapes the core — Node, emcc, emcmake, clang++, CMake, Ninja, rustc,
+cargo. `rustup` is located (it is how the toolchain's `rust-src` is checked) but not hashed:
+it installs the Rust toolchain and does not touch the core, and the runner image replaces
+it on its own schedule.
 
 `.github/workflows/build-core.yml` builds the core on an `ubuntu-24.04` runner from
 those pins — emsdk at the locked commit, CMake and Ninja from PyPI, the Rust nightly with

@@ -2345,7 +2345,6 @@ function validLockedBuildProvenance() {
       cargoVersion: "1.97.0-nightly",
       cargoCommit: "5".repeat(40),
       cargoSha256: hashes.patch,
-      rustupSha256: hashes.patch,
     },
     naga: { crateVersion: "0.1.0", dependencyVersion: "26.0.0", cargoLockSha256: hashes.cargoLock },
   };
