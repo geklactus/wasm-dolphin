@@ -6006,30 +6006,18 @@ async function handleDolphinJitNewCompile(event) {
   }
   if (dolphinJitCacheMap.has(key)) return;
   dolphinJitNewCompileCount += 1;
-  // Reserve the slot synchronously so duplicate notifications dedupe even
-  // before the async compile finishes. Replace with the real Module once
-  // compilation completes. Async to keep discio off-critical-path. After
-  // the compile lands, persist to IndexedDB so subsequent boots can
-  // pre-warm without recompiling.
+  // Reserve the slot synchronously so duplicate notifications dedupe; the Module
+  // arrives later from the ingest drain. §29d: this used to persist each block in
+  // its own IDB transaction and start an async compile of it on the spot — a
+  // thousand of each in the second a Wii menu brought new code — and this worker is
+  // the thread every proxied filesystem syscall from the core waits on (the disc
+  // reads through WORKERFS, the Wii NAND), so a compile burst became a core stall,
+  // which tripped the JIT's regression fuse, which cycled the JIT. Now the bytes go
+  // on a queue; a timer drains it in one IDB transaction and a bounded number of
+  // compiles per tick. Storage is raw wasm bytes (a Module in IDB proved unreliable).
   dolphinJitCacheMap.set(key, null);
-  // Persist bytes synchronously (fire-and-forget IDB put). Storage format
-  // is raw wasm bytes; we recompile at boot. WebAssembly.Module storage in
-  // IDB proved unreliable empirically (put().oncomplete fires but
-  // req.onsuccess never does, and the data doesn't survive). Bytes are
-  // boring TypedArrays and clone reliably.
-  void writeDolphinJitEntryToIdb(key, bytes);
-  dolphinJitCompilePending += 1;
-  WebAssembly.compile(bytes).then((mod) => {
-    dolphinJitCacheMap.set(key, mod);
-  }).catch((err) => {
-    dolphinJitCacheMap.delete(key);
-    if (!self._dolphinJitNewCompileErrLogged) {
-      self._dolphinJitNewCompileErrLogged = true;
-      postStatus(`jit-cache: async compile-on-discio failed: ${err?.message || err}`);
-    }
-  }).finally(() => {
-    dolphinJitCompilePending -= 1;
-  });
+  dolphinJitIngestQueue.push({ key, bytes });
+  scheduleDolphinJitIngestDrain();
   if (
     dolphinJitNewCompileCount === 1 ||
     dolphinJitNewCompileCount === 10 ||
@@ -6038,6 +6026,80 @@ async function handleDolphinJitNewCompile(event) {
     postStatus(
       `jit-cache: discio recorded ${dolphinJitNewCompileCount} new compiles (cache size=${dolphinJitCacheMap.size})`
     );
+  }
+}
+// §29d ingest queue for the pthreads' new compiles: drained every
+// DOLPHIN_JIT_INGEST_INTERVAL_MS into one IDB transaction, with at most
+// DOLPHIN_JIT_INGEST_COMPILES_PER_TICK async compiles started per tick so the
+// worker stays answerable in between (see handleDolphinJitNewCompile).
+const DOLPHIN_JIT_INGEST_INTERVAL_MS = 250;
+const DOLPHIN_JIT_INGEST_COMPILES_PER_TICK = 24;
+const dolphinJitIngestQueue = [];
+const dolphinJitIngestCompileQueue = [];
+let dolphinJitIngestTimer = null;
+function scheduleDolphinJitIngestDrain() {
+  if (dolphinJitIngestTimer !== null) return;
+  dolphinJitIngestTimer = setTimeout(drainDolphinJitIngest, DOLPHIN_JIT_INGEST_INTERVAL_MS);
+}
+function drainDolphinJitIngest() {
+  dolphinJitIngestTimer = null;
+  if (dolphinJitIngestQueue.length > 0) {
+    const batch = dolphinJitIngestQueue.splice(0, dolphinJitIngestQueue.length);
+    writeDolphinJitEntriesToIdb(batch);
+    for (const entry of batch) dolphinJitIngestCompileQueue.push(entry);
+  }
+  const compiles = dolphinJitIngestCompileQueue.splice(0, DOLPHIN_JIT_INGEST_COMPILES_PER_TICK);
+  for (const { key, bytes } of compiles) {
+    if (dolphinJitCacheMap.get(key) !== null) continue;   // gone, or filled from elsewhere
+    dolphinJitCompilePending += 1;
+    WebAssembly.compile(bytes).then((mod) => {
+      if (dolphinJitCacheMap.get(key) === null) dolphinJitCacheMap.set(key, mod);
+    }).catch((err) => {
+      dolphinJitCacheMap.delete(key);
+      if (!self._dolphinJitNewCompileErrLogged) {
+        self._dolphinJitNewCompileErrLogged = true;
+        postStatus(`jit-cache: async compile-on-discio failed: ${err?.message || err}`);
+      }
+    }).finally(() => {
+      dolphinJitCompilePending -= 1;
+    });
+  }
+  if (dolphinJitIngestQueue.length > 0 || dolphinJitIngestCompileQueue.length > 0) scheduleDolphinJitIngestDrain();
+}
+// The batched write: one transaction for everything the ingest drain has, the
+// entries already verified by handleDolphinJitNewCompile.
+function writeDolphinJitEntriesToIdb(entries) {
+  if (!dolphinJitIdb || entries.length === 0) return;
+  try {
+    const tx = dolphinJitIdb.transaction(DOLPHIN_JIT_IDB_STORE, "readwrite");
+    tx.onabort = () => {
+      if (!self._dolphinJitIdbTxAbortLogged) {
+        self._dolphinJitIdbTxAbortLogged = true;
+        postStatus(`jit-cache: IDB tx abort: ${tx.error?.message || "unknown"}`);
+      }
+    };
+    const store = tx.objectStore(DOLPHIN_JIT_IDB_STORE);
+    dolphinJitIdbWritesPending += entries.length;
+    for (const { key, bytes } of entries) store.put(bytes, key);
+    tx.oncomplete = () => {
+      dolphinJitIdbWritesPending -= entries.length;
+      dolphinJitIdbWriteCount += entries.length;
+      if (dolphinJitIdbWriteCount >= 100 && Math.floor((dolphinJitIdbWriteCount - entries.length) / 500) !== Math.floor(dolphinJitIdbWriteCount / 500)) {
+        postStatus(`jit-cache: IDB writes=${dolphinJitIdbWriteCount} pending=${dolphinJitIdbWritesPending}`);
+      }
+    };
+    tx.onerror = () => {
+      dolphinJitIdbWritesPending -= entries.length;
+      if (!self._dolphinJitIdbWriteErrLogged) {
+        self._dolphinJitIdbWriteErrLogged = true;
+        postStatus(`jit-cache: IDB write error: ${tx.error?.message || "unknown"}`);
+      }
+    };
+  } catch (err) {
+    if (!self._dolphinJitIdbWriteErrLogged) {
+      self._dolphinJitIdbWriteErrLogged = true;
+      postStatus(`jit-cache: IDB write threw: ${err?.message || err}`);
+    }
   }
 }
 // §28ch lazy-fill state. Stored at module scope so the background fill
