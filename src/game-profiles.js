@@ -60,7 +60,13 @@ export const RENDERER_FEATURES = Object.freeze({
   // to RAM, EFB peeks and bbox read real values. Off unless a profile (or
   // `?wgpureadback=1`) asks for it; every readback stalls the video thread
   // until the consumer has mapped the copy.
-  readback: Object.freeze({ bit: 1 << 3, default: false, flag: "wgpureadback" })
+  readback: Object.freeze({ bit: 1 << 3, default: false, flag: "wgpureadback" }),
+  // The depth convention of the cores before vendor patch 0076: they skipped
+  // VideoCommon's 1 - x conversions (fog, per-pixel depth, EFB depth copies,
+  // EFB peeks/pokes, clear values) for this backend's reverse-Z depth buffer,
+  // which inverted exactly the effects 3D gameplay uses. Off by default; on
+  // restores that behaviour for an A/B on a title. `?wgpudepthlegacy=1`.
+  legacyDepth: Object.freeze({ bit: 1 << 4, default: false, flag: "wgpudepthlegacy" })
 });
 
 export const RENDERER_FEATURE_DEFAULT_MASK = Object.values(RENDERER_FEATURES)
@@ -231,6 +237,12 @@ export const GAME_PROFILES = {
   // software reference at a matched emulated frame. What is left is speed --
   // hardware averages ~44% against software's ~100% on that same state -- so
   // software stays the default on performance, not on correctness.
+  //
+  // Vendor patch 0076 (2026-10-23) then fixed the depth convention that left fog,
+  // z-texture depth and EFB depth copies inverted on the hardware path -- the
+  // effects 3D gameplay uses and menus do not. It has not been verified by eye on
+  // a GPU yet, so both titles stay here until it is; see
+  // docs/webgpu-hardware-renderer-bugs.md for what to check.
   RMCE01: {
     renderer: "software",
     why: "44% vs ~100% game speed; hardware renders correctly but is slower",
@@ -243,10 +255,10 @@ export const GAME_PROFILES = {
   },
   SOUE01: {
     renderer: "software",
-    why: "hardware unverified in gameplay; no Wii Remote input yet",
+    why: "hardware unverified in gameplay since the 0076 depth fix",
     upstream: "SOU.ini",
     ini: ["[Video_Hacks]", "EFBAccessEnable = True", "EFBEmulateFormatChanges = True"],
-    test: "not yet playable: input is the blocker"
+    test: "the field after the title: the world under the HUD, distance blur soft far and sharp near, fog denser with distance"
   }
 };
 

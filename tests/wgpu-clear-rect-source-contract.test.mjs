@@ -154,7 +154,7 @@ test("ClearRegion emits ClearRect off the renderer mask, not the CPU mask", { sk
   // a whole-attachment one.
   assert.match(
     body,
-    /m_cmd_stream\.PushClearRect\(cx, cy, cw, ch, rgba,\s*\n?\s*static_cast<float>\(z & 0xFFFFFF\) \/ 16777216\.0f, flags\)/,
+    /m_cmd_stream\.PushClearRect\(cx, cy, cw, ch, rgba, clear_depth, flags\)/,
     "PushClearRect is not called with the requested rect and depth"
   );
   for (const [name, expr] of [
@@ -166,16 +166,28 @@ test("ClearRegion emits ClearRect off the renderer mask, not the CPU mask", { sk
     assert.match(body, expr, `${name} is not taken from target_rc`);
   }
 
-  // Flag 8 marks the independent-channel encoding; 1/2/4 are RGB/depth/alpha.
+  // Flag 8 marks the independent-channel encoding; 1/2/4 are RGB/depth/alpha;
+  // 16 says the depth is in the window convention (absent under the legacy
+  // depth convention, where the consumer substitutes its hard-coded far).
   // The JS decoder reads exactly these, so a change here is a protocol change.
   assert.match(
     body,
-    /const u32 flags = 8u \| \(color_enable \? 1u : 0u\) \| \(z_enable \? 2u : 0u\) \|\s*\n?\s*\(alpha_enable \? 4u : 0u\);/,
+    /const u32 flags = 8u \| \(color_enable \? 1u : 0u\) \| \(z_enable \? 2u : 0u\) \|\s*\n?\s*\(alpha_enable \? 4u : 0u\) \| \(legacy_depth \? 0u : 16u\);/,
     "the ClearRect flag encoding changed"
   );
 
-  // Depth is normalised out of GX's 24-bit z, not passed through raw.
-  assert.match(body, /z & 0xFFFFFF\) \/ 16777216\.0f/, "depth normalisation changed");
+  // Depth is normalised out of GX's 24-bit z and then put into the backend's
+  // reverse-Z window convention, so the console's far (0xFFFFFF) clears to 0.0.
+  assert.match(
+    body,
+    /const float console_depth = static_cast<float>\(z & 0xFFFFFF\) \/ 16777216\.0f;/,
+    "depth normalisation changed"
+  );
+  assert.match(
+    body,
+    /const float clear_depth = legacy_depth \? console_depth : 1\.0f - console_depth;/,
+    "the clear depth is no longer sent in the window convention"
+  );
 });
 
 test("native and JS agree on the ClearRect opcode number", { skip }, async () => {

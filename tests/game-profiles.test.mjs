@@ -183,7 +183,8 @@ test("the feature bits match the vendored backend's definitions", {
     scissoredClearRect: "SCISSORED_CLEAR_RECT",
     zcomplocHack: "ZCOMPLOC_HACK",
     logicOpInVideoCommon: "LOGIC_OP_IN_VIDEOCOMMON",
-    readback: "READBACK"
+    readback: "READBACK",
+    legacyDepth: "LEGACY_DEPTH"
   };
   for (const [name, feature] of Object.entries(RENDERER_FEATURES)) {
     const re = new RegExp(`DOLPHIN_WEB_RENDERER_FEATURE_${expected[name]}\\s*=\\s*1u\\s*<<\\s*(\\d+)\\s*;`);

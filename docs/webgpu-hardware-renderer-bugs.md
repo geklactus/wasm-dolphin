@@ -120,6 +120,64 @@ The PR that lands this lists the titles to check in Chrome; the per-title
 in this section moves a title to hardware: that still needs the frame checked
 by eye on the hardware path and a speed win.
 
+## Depth convention made consistent for 3D gameplay (2026-10-23, awaiting GPU verification)
+
+Wii titles rendered their menus on `video=wgpu` and lost their gameplay. The
+cause is in how depth values left the core, not in the consumer's geometry:
+
+- This backend reports `bSupportsReversedDepthRange = false`, and really does
+  run that convention. `BPFunctions::SetScissorAndViewport` maps the vertex
+  shader's reverse-Z output through a `near = 1 - max, far = 1 - min` viewport,
+  so the EFB depth buffer holds `1 - console depth`; the consumer clears depth
+  to 0.0 and flips every depth compare (`REVZ_COMPARE_FLIP`). The in-race
+  measurements below -- the world band at z(0.00,0.84) under the HUD at
+  z(0.89,0.99), nearer being larger -- are that convention.
+- VideoCommon pairs that viewport with a `1 - x` on every other depth value:
+  the fog `zCoord`, the per-pixel depth written by z-textures and zfreeze, EFB
+  depth copies, EFB depth peeks and pokes, and clear values. Patch 0006 (the
+  §28at session) gated all of those off for this backend on the belief that
+  its window depth was not inverted. On the hardware path fog therefore ran
+  inverted (near fogged, far clear), z-texture depth landed on the wrong side
+  of everything, and an EFB depth copy encoded `1 - d`. Those are the effects
+  3D gameplay in Wii-era titles is built on -- depth-of-field composites,
+  shadow-map and water comparisons, soft particles -- and menus never touch
+  them. Plain depth-tested geometry was unaffected, which is why GameCube
+  titles without such effects rendered, and why the race fixture matched
+  software: Mario Kart Wii's captured world shader computes `zCoord` and never
+  uses it (no fog stage), see `docs/diagnostics/mkw-world-fragment-shader.wgsl`.
+- The consumer hard-coded the depth clear to 0.0 (the console's far), right for
+  the usual `0xFFFFFF` clear and wrong for any other; the producer sent an
+  unconverted value, and for sub-rect clears the ClearRect record's depth was
+  ignored for the same reason.
+- An inverted console depth range (`zRange < 0`, the console's own reverse-Z
+  trick) arrived as `near > far`, which WebGPU cannot express; the consumer
+  swapped the two and drew those passes inside out, or black against the
+  hard-coded clear.
+
+Vendor patch `0076-webgpu-depth-convention`:
+
+- removes the §28at gating, so VideoCommon's `1 - x` conversions apply to this
+  backend as to any other without reversed depth ranges;
+- sends the real clear depth, in the window convention, in `BEGIN_PASS` (bit 3
+  plus bits 8..31 of the load-op word) and `CLEAR_RECT` (flag 16); the consumer
+  writes it as sent and keeps the hard-coded 0.0 only for cores that send none
+  (`src/wgpu-depth-clear.js`);
+- routes inverted console depth ranges through the vertex shader
+  (`VertexShaderManager::UseVertexDepthRange`) even without depth clamping, so
+  the GPU viewport is always `[0, 1]` and the swap never fires;
+- keeps the previous behaviour behind `?wgpudepthlegacy=1` (renderer feature
+  mask bit 4, `legacyDepth` in `src/game-profiles.js`) for an A/B on a real title.
+
+**Not verified on a GPU.** The session that made this change had no disc
+images and no hardware adapter; the evidence is the code paths above plus the
+unit tests on the record encodings. Verify in headed Chrome, per title, on
+`video=wgpu&presenter=webgpu` against the software reference: Skyward Sword
+and Mario Kart Wii gameplay first, then Melee, F-Zero GX and Wario World for
+regression. Fog gradients, depth-of-field and shadow effects are the things
+to look at; `?wgpudepthlegacy=1` shows the previous output for the same scene.
+Record the result here, with screenshots and the complete URLs, before moving
+any Wii title to `hardware` in `src/game-profiles.js`.
+
 ## Independent re-verification on a frame-matched fixture (2026-09-08)
 
 The ClearRect work was re-checked from a clean tree by a second pass that did

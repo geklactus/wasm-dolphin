@@ -305,9 +305,10 @@ test("committed Dolphin provenance and ABI manifests verify", () => {
   // 0074 (WebGPU readback and per-game capabilities: WebGPUBoundingBox.cpp,
   // WebGPUReadback.cpp/.h and WebGPURendererFeatures.h), 124; 0075 (band-parallel
   // software rasterizer: SWEfbInterface.h gains FlushPerfCounters and SWmain.cpp
-  // stops the workers), 126.
+  // stops the workers), 126; 0076 (the WebGPU depth convention:
+  // VertexShaderManager.cpp and VideoConfig.h), 128.
   // Update deliberately when the series changes what it modifies.
-  assert.equal(result.vendorSnapshot.rootPaths, 126);
+  assert.equal(result.vendorSnapshot.rootPaths, 128);
   assert.equal(result.vendorSnapshot.submodulePaths, 2);
   assert.equal(result.core.abiVersion, 1);
   assert.equal(result.core.memoryContract.jsGlue.initialPages, 24576);

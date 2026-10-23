@@ -11,6 +11,7 @@ import {
 } from "./upstream-worker-protocol.js";
 import { parseDolHeader } from "./dol.js";
 import { decodeWgpuSamplerState } from "./wgpu-sampler-state.js";
+import { beginPassDepthClear, clearRectDepth } from "./wgpu-depth-clear.js";
 import { decodePrebuiltCache } from "./prebuilt-jit-cache-format.js";
 import {
   rendererFeatureMask,
@@ -11693,6 +11694,10 @@ function drainWebGpuCmdRing(source = "presentation") {
           // clear also wiped colour. On Wario World that destroyed a fully
           // rendered 3D EFB right before the XFB copy, leaving only the 2D
           // overlay on black (issue #8).
+          //
+          // Cores from vendor patch 0076 on also set bit 3 and carry the depth
+          // clear value in bits 8..31 (src/wgpu-depth-clear.js); older cores
+          // leave those zero and get the hard-coded far clear below.
           const clearMask = u32[recWord + 6];
           const clearAny = (clearMask & 1) !== 0;
           const legacyClear = clearMask === 1;
@@ -11716,21 +11721,15 @@ function drainWebGpuCmdRing(source = "presentation") {
             if (u32[nrw] === WGPU_CMD_OP_SET_VIEWPORT)
               self._wgPassRevZ = f32[nrw + 5] > f32[nrw + 6];
           }
-          // §28at: SINGLE non-reverse convention (producer flag=false
-          // + C++ inversion cluster decoupled). Bake a CONSTANT far
-          // depth clear for EVERY pass — a per-pass dcv is exactly
-          // the §28aq flicker mechanism (one baked value can't serve a
-          // mixed pass). With uniform normal-Z [0,1] viewports and the
-          // [s28at-vp] PROVED flag=false makes EVERY viewport arrive
-          // T(near=0,far=1) → consumer setViewport(0,1) for all — the
-          // SAME setViewport flag=true-3D produces after swapping its
-          // raw (1,0). flag=true-3D RENDERS that with dcv=0.0 + GEQUAL
-          // (reverse-Z carried in the projection/VS, which is NOT
-          // flag-keyed). So the single convention = dcv=0.0 + flipped
-          // compare for ALL rzRelevant draws (uniform — see
-          // REVZ_COMPARE_FLIP). dcv=1.0/unflipped was backwards = black;
-          // §28as's dcv=0.0-but-unflipped was the half-right mismatch.
-          const dcv = GX_NATIVE_DEPTH ? 1.0 : 0.0;
+          // This backend stores reverse-Z window depth (1 - console depth), so
+          // the console's far clear, 0xFFFFFF, is 0.0 here and every flippable
+          // depth compare is inverted (REVZ_COMPARE_FLIP). That far value was
+          // hard-coded for every pass until the producer started sending the
+          // game's actual clear depth in the window convention (vendor patch
+          // 0076); a core that sends none still gets the hard-coded far. One
+          // value per pass is all WebGPU allows: depthClearValue is fixed at
+          // beginRenderPass.
+          const dcv = beginPassDepthClear(clearMask, GX_NATIVE_DEPTH ? 1.0 : 0.0);
           // §28aq DISCRIMINATING PROBE: record the revZ baked into
           // this pass's depthClearValue; the SET_VIEWPORT handler
           // logs when a later viewport in the SAME pass disagrees
@@ -12286,16 +12285,14 @@ function drainWebGpuCmdRing(source = "presentation") {
           const cw = Math.max(1, Math.min(u32[recWord + 3], passW - cx));
           const ch = Math.max(1, Math.min(u32[recWord + 4], passH - cy));
           const crgba = u32[recWord + 5] >>> 0;
-          // The producer sends the game's clear depth (~1.0), but this backend
-          // runs the reverse-Z convention: BeginPass clears depth to dcv = 0.0
-          // and every flippable pipeline compare is inverted to the greater
-          // family. Writing 1.0 here means a fragment must reach depth >= 1.0
-          // to pass, so every draw after the clear is rejected and the frame
-          // goes black -- which is why this path was left off by default.
-          // Use the same value the loadOp path uses.
-          const cdepthRaw = f32[recWord + 6];
-          const cdepth = GX_NATIVE_DEPTH ? cdepthRaw : 0.0;
           const cflags = u32[recWord + 7] >>> 0;
+          // Cores from vendor patch 0076 on send the clear depth in this
+          // backend's window convention (reverse-Z: the console's far is 0.0)
+          // and set flag 16. Older cores sent the raw console value (~1.0),
+          // which under reverse-Z is the NEAREST plane and rejected every later
+          // draw; they keep getting the hard-coded far the loadOp path used.
+          const cdepthRaw = f32[recWord + 6];
+          const cdepth = clearRectDepth(cflags, cdepthRaw, GX_NATIVE_DEPTH ? cdepthRaw : 0.0);
           // New records carry independent RGB/alpha enables. Legacy records
           // used bit 0 for all four color channels. Alpha-only clears build
           // masks for EFB-copy effects and must preserve the rendered RGB.

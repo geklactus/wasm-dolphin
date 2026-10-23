@@ -6,6 +6,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
+import { clearRectDepth } from "../src/wgpu-depth-clear.js";
+
 const worker = await readFile(
   new URL("../src/upstream-discio-worker.js", import.meta.url), "utf8"
 );
@@ -38,7 +40,7 @@ function clearRect(viewport, scissor = [4, 4, 4, 4], flags = 3, onPipeline = () 
       pass, passW: 8, passH: 8, passColorFmt: "rgba8unorm", passDepthFmt: "depth32float",
       u32, f32, recWord: 0, WGPU_CMD_OP_CLEAR_RECT: 25,
       dev: {}, ensureClearPipeline: (...args) => { onPipeline(args); return pipeline; },
-      GX_NATIVE_DEPTH: false, CLEARRECT_FULL_VIEWPORT: true,
+      GX_NATIVE_DEPTH: false, CLEARRECT_FULL_VIEWPORT: true, clearRectDepth,
       DIAG_DEPTH_TRACE: false, vpDiagDone: true,
       lastAppliedViewport: viewport, lastAppliedScissor: scissor, self,
       recordRendererError: (...args) => errors.push(args),
@@ -194,3 +196,23 @@ test("clear pipelines preserve channel masks in GPU descriptors and cache identi
   assert.equal(descriptors.length, 4);
   assert.deepEqual(errors, []);
 });
+
+// The record's depth (0.25 in the harness) reaches the clear pipeline only when
+// the producer flags it as already being in the window convention. Older cores
+// sent the raw console value, which under reverse-Z is the nearest plane, so
+// they keep the hard-coded far clear.
+for (const [name, flags, depth] of [
+  ["unflagged depth keeps the hard-coded far clear", 3, 0],
+  ["flagged depth is written as sent", 3 | 16, 0.25],
+  ["flagged independent-channel depth is written as sent", 15 | 16, 0.25],
+]) {
+  test(`ClearRect ${name}`, () => {
+    let pipelineCalls = 0;
+    clearRect([0, 0, 8, 8, 0, 1], null, flags, (args) => {
+      pipelineCalls++;
+      assert.equal(args[4], true, "depth writes requested");
+      assert.equal(args[6], depth, "depth handed to the clear pipeline");
+    });
+    assert.equal(pipelineCalls, 1);
+  });
+}

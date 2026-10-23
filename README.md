@@ -158,7 +158,7 @@ link. See [rendering modes](docs/rendering-modes.md) and
 |------|-------|
 | Melee boot + gameplay (software hybrid) | ✅ Playable when locally validated; speed is scene/machine dependent |
 | Broader GameCube library | ✅ Boots widely; per-game renderer defaults from two 45-disc sweeps |
-| Wii discs | ⚠️ Boot and run on the software path; no Wii Remote input yet |
+| Wii discs | ⚠️ Boot and run on the software path, Wii Remote 1 driven from the page; the hardware path's depth convention was fixed for 3D gameplay (patch 0076) and awaits by-eye verification |
 | PPC→WASM JIT with GPR register cache | ⚠️ Default-on; old `addzex` failures are fixed, benefit remains scene-dependent |
 | Presentation smoothness (pacing, fast raster) | ✅ Tunable; software rasterizer caps unique-frame rate |
 | Audio | ✅ Worker-fed/tuned audio buffering |
@@ -208,7 +208,13 @@ scene-, cache-, browser-, and machine-dependent.
 | D-pad | Arrow keys |
 | Main stick | `W`, `A`, `S`, `D` |
 
-Standard browser gamepads are also polled. Wii Remote input is not implemented.
+Standard browser gamepads are also polled.
+
+Wii Remote 1 is driven from the page (`src/wiimote.js`): point with the mouse
+over the game, left click A, right click B, `1` / `2`, `Q` / `E` for − / +,
+`Enter` Home, arrow keys for the D-pad, `Space` to shake. The Nunchuk is
+`W` `A` `S` `D` with `Ctrl` for C and `Shift` for Z. A gamepad is held like a
+Classic Controller: left stick Nunchuk, right stick points.
 
 ---
 
@@ -338,6 +344,14 @@ hardware run back out for perf-attribution work that must not pay the GPU pass
 and mapped readback; with the readback off, the path reports its sample source
 as `unsampled` rather than claiming an `xfb-hash` it never took.
 
+Depth on this path is reverse-Z: the EFB depth buffer holds `1 - console depth`,
+the consumer clears depth to 0.0 and flips every depth compare, and -- since
+vendor patch 0076 -- VideoCommon converts fog, per-pixel depth, EFB depth copies,
+EFB peeks/pokes and clear values to match, as it does for any backend without
+reversed depth ranges. The cores before 0076 skipped those conversions, which
+inverted exactly the depth-based effects 3D gameplay is built on while menus
+rendered. `?wgpudepthlegacy=1` restores that older behaviour for an A/B.
+
 This path needs Dolphin's shaders in WGSL. Dolphin generates GLSL → glslang
 compiles it to SPIR-V (in C++) → the Rust crate below does the final hop.
 
@@ -373,7 +387,9 @@ the hardware path needs to honour it:
   them. The fourth, **GPU readback** (EFB copies to RAM, EFB peeks, bounding
   box), is a per-copy stall and is on only where upstream's settings say the
   game reads its EFB back. Each bit has a URL flag for bisection:
-  `wgpuclearrect`, `wgpuzcomploc`, `wgpulogicop`, `wgpureadback` (`=0`/`=1`).
+  `wgpuclearrect`, `wgpuzcomploc`, `wgpulogicop`, `wgpureadback`,
+  `wgpudepthlegacy` (`=0`/`=1`). The last is off: it restores the depth
+  convention of the cores before vendor patch 0076, for an A/B only.
 
 The **Auto per-game** switch governs all of it; an explicit `?video=` flag
 overrides only the renderer choice. The status line names what was applied.
@@ -496,9 +512,13 @@ tests/                   Node unit tests
 - **The WebGPU hardware renderer is GPU- and title-dependent** — verify on your
   target GPU before relying on it; it renders black or misplaces viewports on
   some combinations.
-- **Wii support is partial.** Discs boot and run on the software path, but there
-  is no Wii Remote input yet, and the hardware path misplaces in-race viewports
-  in the titles that were checked.
+- **Wii support is partial.** Discs boot and run on the software path with Wii
+  Remote 1 from the page. On the hardware path, Wii titles rendered their menus
+  and lost their 3D gameplay; the cause -- fog, z-texture depth and EFB depth
+  copies left inverted by an inconsistent depth convention -- is fixed in vendor
+  patch 0076, but no Wii title has yet been verified by eye in gameplay on it,
+  so Wii titles keep the software default. See
+  [the hardware renderer bug log](docs/webgpu-hardware-renderer-bugs.md).
 - In-browser structural limits (no fastmem trap and no SIMD emission in the
   dynamic PPC JIT) bound how close the JIT can get to native speed.
 
@@ -542,7 +562,7 @@ built from. The core `.wasm` in this repository is built from:
 - upstream Dolphin at commit
   [`cf5cb7ef`](https://github.com/dolphin-emu/dolphin/commit/cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b)
   (master, 2026-10-19),
-- plus the 72 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
+- plus the 73 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
 - plus the C-ABI shim in [`core/upstream/`](core/upstream) and the build driver
   in [`tools/`](tools).
 
