@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "abiVersion": 1,
-  "coreId": "sha256:0701fe701da133fc191775f004a35a5f403b6d31cc1882ff07ba605b1783421f",
+  "coreId": "sha256:984846a31d2a27a5b034ea68ab8e6df1e6103b8af844de8ca706a4782fd92ea4",
   "upstreamCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
   "artifacts": [
     {
       "path": "cores/dolphin/dolphin-core-upstream.js",
       "hashMode": "lf-normalized",
       "size": 267148,
-      "sha256": "ff8939ca6fe5ce4103b63d295014f69444a26c5d4e36ce4f58b372491facfc9d"
+      "sha256": "6790a2b956748aadbafb879cbf42a98fffb3026547226e86b777927ff858730f"
     },
     {
       "path": "cores/dolphin/dolphin-core-upstream.wasm",
-      "size": 13223766,
-      "sha256": "0701fe701da133fc191775f004a35a5f403b6d31cc1882ff07ba605b1783421f"
+      "size": 13224051,
+      "sha256": "984846a31d2a27a5b034ea68ab8e6df1e6103b8af844de8ca706a4782fd92ea4"
     }
   ],
   "contractSources": [
@@ -80,8 +80,8 @@
     {
       "path": "src/core-host.js",
       "hashMode": "lf-normalized",
-      "size": 67030,
-      "sha256": "76aa61afad8ac3affdd3097011893d7e77f5246ebd395924ca0e1b5a291763ce"
+      "size": 67696,
+      "sha256": "c8f9b3ced4bc4d4ffef2356802d8b7b4c1da4d94cb98ddb7eb79d50f06e1ad96"
     },
     {
       "path": "src/diagnostic-log-filter.js",
@@ -134,8 +134,8 @@
     {
       "path": "src/upstream-discio-worker.js",
       "hashMode": "lf-normalized",
-      "size": 628243,
-      "sha256": "490e9570e6b79e5dfe09800df19f242ecd4d716cd74951ffc5720553cf7f71ca"
+      "size": 628468,
+      "sha256": "fec028dd13533c3c71addc2bced9d42a8824268ea80020d31ea394506ac0f4aa"
     },
     {
       "path": "src/wgpu-renderer-worker-probe.js",
@@ -158,14 +158,14 @@
     {
       "path": "src/upstream-worker-adapter.js",
       "hashMode": "lf-normalized",
-      "size": 43141,
-      "sha256": "320e2d060f10c19b851854d92983f3bd15985eba1d07e3a28971b905e21483a2"
+      "size": 43268,
+      "sha256": "d0733451990eb857ea79cd433db90ddcf0b469a2f05f29385d1b875e0368002b"
     },
     {
       "path": "src/upstream-worker-protocol.js",
       "hashMode": "lf-normalized",
       "size": 5117,
-      "sha256": "d166182380b03cb0b1d59fb35245ee49e35c514986be41ce4f00997c6c83ee2f"
+      "sha256": "a302316c2689f9f66989f18827f4191ef4038ef0271d4c33cb5a5044ea372b4e"
     },
     {
       "path": "src/wgpu-pass-state-cache.js",
