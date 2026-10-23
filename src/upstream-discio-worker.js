@@ -434,6 +434,10 @@ function sampleCoreFpsRolling(coreFrame) {
 // frame counter not advancing in wall-clock time.
 let ppcWasmJitFuseLastFrame = -1;
 let ppcWasmJitFuseLastTime = 0;
+let ppcWasmJitFuseLastCompileCount = -1;
+// §29e: how many fresh blocks in a fuse window say "this is cold code, not a JIT that
+// made things worse". A Wii menu transition brings a few thousand.
+const WASM_JIT_FUSE_COLD_CODE_COMPILES = 150;
 let ppcWasmJitTier = "guarded";
 let ppcWasmJitWarmupFrames = 3600;
 let pacedPresentationActive = false;
@@ -934,6 +938,7 @@ async function handleMessage(type, payload) {
         softwareTevHotCaseMode: payload.softwareTevHotCaseMode,
         xfbFastPaths: payload.xfbFastPaths,
         correctTimeDrift: payload.correctTimeDrift,
+        fastDiscSpeed: payload.fastDiscSpeed,
         coreLog: payload.coreLog,
         efbDiag: payload.efbDiag,
         jitVerbose: payload.jitVerbose,
@@ -1459,6 +1464,7 @@ async function loadCore({
   softwareTevHotCaseMode: requestedSoftwareTevHotCaseMode = 0,
   xfbFastPaths = 0,
   correctTimeDrift = false,
+  fastDiscSpeed = true,
   coreLog = false,
   efbDiag = false,
   jitVerbose = false,
@@ -1848,6 +1854,7 @@ async function loadCore({
   const _t_fetch = performance.now();
   const { wasmBinary, fingerprint: buildFingerprint } =
       await fetchWasmAndFingerprint(coreUrl, expectedCoreSha256);
+  dolphinJitBuildFingerprint = buildFingerprint;
   console.log(`[boot-phase] fetchWasmAndFingerprint took ${(performance.now() - _t_fetch).toFixed(1)}ms (${(wasmBinary.byteLength / 1048576).toFixed(2)}MiB)`);
   const _t_import = performance.now();
   const imported = await import(coreUrl);
@@ -1921,6 +1928,8 @@ async function loadCore({
     // Read by dolphin_web_core.cpp at CoreInit. Both are opt-in and default
     // false, so the shipping page load is unchanged.
     dolphinCorrectTimeDrift: Boolean(correctTimeDrift),
+    // §29b: false asks for real drive timing (?fastdisc=0); default keeps the fast reads.
+    dolphinFastDiscSpeed: fastDiscSpeed !== false,
     dolphinCoreLog: Boolean(coreLog),
     // Ranks the instructions that block JIT compilation (?jitverbose=1).
     dolphinWebVerbosePpcJit: Boolean(jitVerbose),
@@ -2527,6 +2536,11 @@ async function mountFile(file) {
     if (coreBoot.accepted) {
       rendererDiagnostics.activeVideoBackend = rendererDiagnostics.configuredVideoBackend || "unknown";
       rendererDiagnostics.videoBackendEvidence = "SetVideoBackend invoked and BootDisc accepted";
+      // §29c: the disc has said who it is; its prebuilt cache, if the server has one,
+      // lands in the background while the game boots.
+      seedPerGamePrebuiltCache(api.getGameId?.(), dolphinJitBuildFingerprint).catch((error) => {
+        postStatus(`jit-cache: per-title prebuilt seed failed: ${error?.message || error}`);
+      });
     }
     console.log(`[boot-phase] api.bootDisc() took ${(performance.now() - _t_boot).toFixed(1)}ms`);
     const _t_pump = performance.now();
@@ -3582,6 +3596,7 @@ function resetPpcWasmJitTiming(invalidateBaseline = false) {
   ppcWasmJitCoreSampleTime = 0;
   ppcWasmJitCoreFpsRolling = 0;
   ppcWasmJitFuseLastFrame = -1;
+  ppcWasmJitFuseLastCompileCount = -1;
   ppcWasmJitFuseLastTime = 0;
   presentationMaxIntervalMs = 0;
   maxIntervalSincePresentationFps = 0;
@@ -3653,6 +3668,7 @@ function maybeEnablePpcWasmJit(coreFrame = api?.getFrame?.() ?? 0) {
   // pre-cooldown (frame,time) pair can't compute a bogus low coreFps
   // across the cooldown gap on the first post-re-engage fuse check.
   ppcWasmJitFuseLastFrame = -1;
+  ppcWasmJitFuseLastCompileCount = -1;
   const reason = dolphinJitCachePreWarmed && effectiveWarmup === MINIMUM_PRE_JIT_FRAMES
     ? `pre-warmed cache hit, JIT engaged at frame ${coreFrame}`
     : `JIT enabled after ${coreFrame} stable video frames`;
@@ -3722,6 +3738,7 @@ function maybeDisablePpcWasmJit(coreFrame = api?.getFrame?.() ?? 0) {
   const nowMs = (typeof performance !== "undefined" ? performance.now()
                  : Date.now());
   const cf = coreFrame >>> 0;
+  const compileCount = api.getPpcWasmBlockCompileCount?.() ?? 0;
   let catastrophic = false;
   let regressed = false;
   if (ppcWasmJitFuseLastFrame >= 0) {
@@ -3729,16 +3746,29 @@ function maybeDisablePpcWasmJit(coreFrame = api?.getFrame?.() ?? 0) {
     if (dtMs >= 1500) {
       const dFrames = (cf - ppcWasmJitFuseLastFrame) >>> 0;
       const coreFps = (dFrames * 1000) / dtMs;
-      catastrophic = coreFps < WASM_JIT_ABSOLUTE_FLOOR_FPS;
-      regressed =
-        ppcWasmJitPreEngageCoreFps >= WASM_JIT_REGRESSION_MIN_BASELINE_FPS &&
-        coreFps < ppcWasmJitPreEngageCoreFps * WASM_JIT_REGRESSION_FRACTION;
+      // §29e: a window in which the JIT compiled a lot of fresh blocks is cold code
+      // — a new screen, a save routine — and the slow frames are the interpreter
+      // running what hasn't compiled yet. Turning the JIT off there made the core
+      // slower still and brought it back 300 frames later into the same burst (the
+      // 20%/160% sawtooth measured on Mario Kart Wii's menus). Judge only windows
+      // the JIT had nothing new to do in; the 5 s post-activation stall guard above
+      // still catches a real freeze.
+      const coldCode = ppcWasmJitFuseLastCompileCount >= 0 &&
+        compileCount - ppcWasmJitFuseLastCompileCount >= WASM_JIT_FUSE_COLD_CODE_COMPILES;
+      if (!coldCode) {
+        catastrophic = coreFps < WASM_JIT_ABSOLUTE_FLOOR_FPS;
+        regressed =
+          ppcWasmJitPreEngageCoreFps >= WASM_JIT_REGRESSION_MIN_BASELINE_FPS &&
+          coreFps < ppcWasmJitPreEngageCoreFps * WASM_JIT_REGRESSION_FRACTION;
+      }
       ppcWasmJitFuseLastFrame = cf;
       ppcWasmJitFuseLastTime = nowMs;
+      ppcWasmJitFuseLastCompileCount = compileCount;
     }
   } else {
     ppcWasmJitFuseLastFrame = cf;
     ppcWasmJitFuseLastTime = nowMs;
+    ppcWasmJitFuseLastCompileCount = compileCount;
   }
 
   if (!regressed && !catastrophic) {
@@ -5844,6 +5874,86 @@ async function maybeSeedIdbFromPrebuiltCache(coreUrlValue, currentFingerprint) {
   return seeded;
 }
 
+// §29c per-title prebuilt JIT cache. The one file beside the core (prebuilt-jit-cache.bin,
+// read at boot, bounded by the boot load) cannot carry a library of titles; a file per
+// title — prebuilt-jit-cache/<GAMEID>.bin beside the core, same format, same fingerprint
+// rule — can, fetched once the disc has said who it is. Entries the cache doesn't hold
+// yet are compiled here, off the CPU pthread, pushed to the pthreads the way the lazy
+// fill does, and written to IDB so the next session reads them from there; the warmup
+// gate collapses once enough have landed, so a title's first session plays like its
+// second. A 404 is the normal case for a title nobody prebuilt.
+let dolphinJitBuildFingerprint = "";
+let dolphinJitPerGameSeeded = "";
+async function seedPerGamePrebuiltCache(gameId, currentFingerprint) {
+  await dolphinJitIdbReady;
+  if (!dolphinJitCachePersistenceEnabled || !dolphinJitIdb || !currentFingerprint) return 0;
+  const id = String(gameId || "").toUpperCase();
+  if (!/^[A-Z0-9]{4,6}$/.test(id) || dolphinJitPerGameSeeded === id) return 0;
+  dolphinJitPerGameSeeded = id;
+  const url = new URL(`prebuilt-jit-cache/${id}.bin`, coreUrl).href;
+  let buffer;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return 0;
+    buffer = await resp.arrayBuffer();
+  } catch {
+    return 0;
+  }
+  let decoded;
+  try {
+    decoded = decodePrebuiltCache(buffer);
+  } catch (err) {
+    postStatus(`jit-cache: ${id}: prebuilt decode failed: ${err?.message || err}`);
+    return 0;
+  }
+  if (decoded.fingerprint !== currentFingerprint) {
+    postStatus(`jit-cache: ${id}: prebuilt fingerprint mismatch (file=${decoded.fingerprint.slice(0, 8)} build=${currentFingerprint.slice(0, 8)}); ignored`);
+    return 0;
+  }
+  if (decoded.entryKeySchema !== JIT_CACHE_ENTRY_KEY_SCHEMA) {
+    postStatus(`jit-cache: ${id}: prebuilt entry-key schema mismatch; ignored`);
+    return 0;
+  }
+  const verified = await verifyDolphinJitEntries(decoded.entries);
+  if (!verified) {
+    postStatus(`jit-cache: ${id}: prebuilt block identity mismatch; entire file ignored`);
+    return 0;
+  }
+  const fresh = verified.filter(({ key }) => !dolphinJitCacheMap.has(key));
+  postStatus(`jit-cache: ${id}: prebuilt file holds ${verified.length} modules, ${fresh.length} new`);
+  const BATCH = 32;
+  const startedAt = performance.now();
+  let added = 0;
+  for (let i = 0; i < fresh.length; i += BATCH) {
+    if (dolphinJitCacheMap.size >= DOLPHIN_JIT_CACHE_MAX) break;
+    const slice = fresh.slice(i, i + BATCH);
+    const settled = await Promise.allSettled(slice.map(({ bytes }) => WebAssembly.compile(bytes)));
+    for (let k = 0; k < settled.length; k++) {
+      if (settled[k].status !== "fulfilled") continue;
+      const { key, bytes } = slice[k];
+      if (dolphinJitCacheMap.has(key)) continue;
+      const mod = settled[k].value;
+      dolphinJitCacheMap.set(key, mod);
+      added += 1;
+      for (const w of dolphinJitPthreadWorkers) {
+        try {
+          w.postMessage({ type: "dolphin-jit-cache-add", hash: key, module: mod });
+        } catch {
+          // a worker that has gone away; the rest still get it
+        }
+      }
+      writeDolphinJitEntryToIdb(key, bytes);
+    }
+    if (!dolphinJitCachePreWarmed && added >= DOLPHIN_JIT_PREWARM_THRESHOLD) {
+      dolphinJitCachePreWarmed = true;
+      postStatus(`jit-cache: ${id}: pre-warmed from its prebuilt file; JIT warmup gate will be skipped`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  postStatus(`jit-cache: ${id}: ${added} prebuilt modules in (cache ${dolphinJitCacheMap.size}) in ${Math.round(performance.now() - startedAt)}ms`);
+  return added;
+}
+
 async function reconcileJitCacheWithBuild(fingerprint) {
   await dolphinJitIdbReady;
   if (!dolphinJitIdb) return 0;
@@ -5916,30 +6026,18 @@ async function handleDolphinJitNewCompile(event) {
   }
   if (dolphinJitCacheMap.has(key)) return;
   dolphinJitNewCompileCount += 1;
-  // Reserve the slot synchronously so duplicate notifications dedupe even
-  // before the async compile finishes. Replace with the real Module once
-  // compilation completes. Async to keep discio off-critical-path. After
-  // the compile lands, persist to IndexedDB so subsequent boots can
-  // pre-warm without recompiling.
+  // Reserve the slot synchronously so duplicate notifications dedupe; the Module
+  // arrives later from the ingest drain. §29d: this used to persist each block in
+  // its own IDB transaction and start an async compile of it on the spot — a
+  // thousand of each in the second a Wii menu brought new code — and this worker is
+  // the thread every proxied filesystem syscall from the core waits on (the disc
+  // reads through WORKERFS, the Wii NAND), so a compile burst became a core stall,
+  // which tripped the JIT's regression fuse, which cycled the JIT. Now the bytes go
+  // on a queue; a timer drains it in one IDB transaction and a bounded number of
+  // compiles per tick. Storage is raw wasm bytes (a Module in IDB proved unreliable).
   dolphinJitCacheMap.set(key, null);
-  // Persist bytes synchronously (fire-and-forget IDB put). Storage format
-  // is raw wasm bytes; we recompile at boot. WebAssembly.Module storage in
-  // IDB proved unreliable empirically (put().oncomplete fires but
-  // req.onsuccess never does, and the data doesn't survive). Bytes are
-  // boring TypedArrays and clone reliably.
-  void writeDolphinJitEntryToIdb(key, bytes);
-  dolphinJitCompilePending += 1;
-  WebAssembly.compile(bytes).then((mod) => {
-    dolphinJitCacheMap.set(key, mod);
-  }).catch((err) => {
-    dolphinJitCacheMap.delete(key);
-    if (!self._dolphinJitNewCompileErrLogged) {
-      self._dolphinJitNewCompileErrLogged = true;
-      postStatus(`jit-cache: async compile-on-discio failed: ${err?.message || err}`);
-    }
-  }).finally(() => {
-    dolphinJitCompilePending -= 1;
-  });
+  dolphinJitIngestQueue.push({ key, bytes });
+  scheduleDolphinJitIngestDrain();
   if (
     dolphinJitNewCompileCount === 1 ||
     dolphinJitNewCompileCount === 10 ||
@@ -5948,6 +6046,80 @@ async function handleDolphinJitNewCompile(event) {
     postStatus(
       `jit-cache: discio recorded ${dolphinJitNewCompileCount} new compiles (cache size=${dolphinJitCacheMap.size})`
     );
+  }
+}
+// §29d ingest queue for the pthreads' new compiles: drained every
+// DOLPHIN_JIT_INGEST_INTERVAL_MS into one IDB transaction, with at most
+// DOLPHIN_JIT_INGEST_COMPILES_PER_TICK async compiles started per tick so the
+// worker stays answerable in between (see handleDolphinJitNewCompile).
+const DOLPHIN_JIT_INGEST_INTERVAL_MS = 250;
+const DOLPHIN_JIT_INGEST_COMPILES_PER_TICK = 24;
+const dolphinJitIngestQueue = [];
+const dolphinJitIngestCompileQueue = [];
+let dolphinJitIngestTimer = null;
+function scheduleDolphinJitIngestDrain() {
+  if (dolphinJitIngestTimer !== null) return;
+  dolphinJitIngestTimer = setTimeout(drainDolphinJitIngest, DOLPHIN_JIT_INGEST_INTERVAL_MS);
+}
+function drainDolphinJitIngest() {
+  dolphinJitIngestTimer = null;
+  if (dolphinJitIngestQueue.length > 0) {
+    const batch = dolphinJitIngestQueue.splice(0, dolphinJitIngestQueue.length);
+    writeDolphinJitEntriesToIdb(batch);
+    for (const entry of batch) dolphinJitIngestCompileQueue.push(entry);
+  }
+  const compiles = dolphinJitIngestCompileQueue.splice(0, DOLPHIN_JIT_INGEST_COMPILES_PER_TICK);
+  for (const { key, bytes } of compiles) {
+    if (dolphinJitCacheMap.get(key) !== null) continue;   // gone, or filled from elsewhere
+    dolphinJitCompilePending += 1;
+    WebAssembly.compile(bytes).then((mod) => {
+      if (dolphinJitCacheMap.get(key) === null) dolphinJitCacheMap.set(key, mod);
+    }).catch((err) => {
+      dolphinJitCacheMap.delete(key);
+      if (!self._dolphinJitNewCompileErrLogged) {
+        self._dolphinJitNewCompileErrLogged = true;
+        postStatus(`jit-cache: async compile-on-discio failed: ${err?.message || err}`);
+      }
+    }).finally(() => {
+      dolphinJitCompilePending -= 1;
+    });
+  }
+  if (dolphinJitIngestQueue.length > 0 || dolphinJitIngestCompileQueue.length > 0) scheduleDolphinJitIngestDrain();
+}
+// The batched write: one transaction for everything the ingest drain has, the
+// entries already verified by handleDolphinJitNewCompile.
+function writeDolphinJitEntriesToIdb(entries) {
+  if (!dolphinJitIdb || entries.length === 0) return;
+  try {
+    const tx = dolphinJitIdb.transaction(DOLPHIN_JIT_IDB_STORE, "readwrite");
+    tx.onabort = () => {
+      if (!self._dolphinJitIdbTxAbortLogged) {
+        self._dolphinJitIdbTxAbortLogged = true;
+        postStatus(`jit-cache: IDB tx abort: ${tx.error?.message || "unknown"}`);
+      }
+    };
+    const store = tx.objectStore(DOLPHIN_JIT_IDB_STORE);
+    dolphinJitIdbWritesPending += entries.length;
+    for (const { key, bytes } of entries) store.put(bytes, key);
+    tx.oncomplete = () => {
+      dolphinJitIdbWritesPending -= entries.length;
+      dolphinJitIdbWriteCount += entries.length;
+      if (dolphinJitIdbWriteCount >= 100 && Math.floor((dolphinJitIdbWriteCount - entries.length) / 500) !== Math.floor(dolphinJitIdbWriteCount / 500)) {
+        postStatus(`jit-cache: IDB writes=${dolphinJitIdbWriteCount} pending=${dolphinJitIdbWritesPending}`);
+      }
+    };
+    tx.onerror = () => {
+      dolphinJitIdbWritesPending -= entries.length;
+      if (!self._dolphinJitIdbWriteErrLogged) {
+        self._dolphinJitIdbWriteErrLogged = true;
+        postStatus(`jit-cache: IDB write error: ${tx.error?.message || "unknown"}`);
+      }
+    };
+  } catch (err) {
+    if (!self._dolphinJitIdbWriteErrLogged) {
+      self._dolphinJitIdbWriteErrLogged = true;
+      postStatus(`jit-cache: IDB write threw: ${err?.message || err}`);
+    }
   }
 }
 // §28ch lazy-fill state. Stored at module scope so the background fill

@@ -25,7 +25,7 @@
       "commit": "01e0577914a75a2569c846778c2f93aa8e6feddd"
     }
   },
-  "patchSeriesSha256": "53f8cb8ad06be5a3c0c91f7bd04c0eb18de993d7592b4ff2968f9613a6fa4de0",
+  "patchSeriesSha256": "078bac90768b47e88924c140431a76b6bd4c3eacbcc3f84c8b45fec3bc8c8fb3",
   "patches": [
     {
       "order": 1,
@@ -557,6 +557,38 @@
     },
     {
       "order": 67,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0070-compile-wall-budget.patch",
+      "size": 6943,
+      "sha256": "fc88e40df14de7afc27aed5a5b157d51edefbddaadec5d1d242532f5551fbae4"
+    },
+    {
+      "order": 68,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0071-ios-hostfs-fewer-syscalls.patch",
+      "size": 7090,
+      "sha256": "5877aeeecd5d08eb0759ba1775f989f0ec8f298bd6a15a9aa7979fe4ceecb981"
+    },
+    {
+      "order": 69,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0072-compile-cap-per-slice.patch",
+      "size": 2390,
+      "sha256": "a6a4d7fac8706ef42100e6aaaae93b49a1979492477ceeecdb84b9955653a8c3"
+    },
+    {
+      "order": 70,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0073-compile-budget-no-lockout.patch",
+      "size": 6725,
+      "sha256": "b168a81f04e3e85974d5969c6a4b3ebaf76e6c3fd102586ec1dc9120893400e2"
+    },
+    {
+      "order": 71,
       "cwd": "Externals/SFML/SFML",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0001-sfml-emscripten-config.patch",
@@ -564,7 +596,7 @@
       "sha256": "f82197a21fe982ad83f6ee7bbf5a03839b1cebd4d64da3eab11263842bf61d89"
     },
     {
-      "order": 68,
+      "order": 72,
       "cwd": "Externals/xxhash/xxHash",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0002-xxhash-wasm-simd-scalar.patch",

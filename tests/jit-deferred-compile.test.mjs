@@ -113,6 +113,14 @@ struct CachedInterpreter {
   BlockCache* GetBlockCache() { return &cache; }
 };
 bool s_wasm_jit_enabled = true;
+// §29f seams: the wall-clock bucket the retry asks before it drains, and the lever that
+// turns that bucket off.
+constexpr u32 DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET = 1u << 24;
+u32 g_disable_mask = 0;
+bool g_wall_budget_can_pay = true;
+int g_wall_budget_asks = 0;
+bool DolphinWebHelperDisabled(u32 bit) { return (g_disable_mask & bit) != 0; }
+bool WasmCompileWallBudgetCanPay() { ++g_wall_budget_asks; return g_wall_budget_can_pay; }
 ${budget}
 ${queues}
 ${retry}
@@ -197,6 +205,24 @@ int main() {
   assert(s_deferred_wasm_queues.at(&cpu).Stored() == 3);
   RetryDeferredWasmBlocks(cpu);
   assert(s_deferred_wasm_queues.count(&cpu) == 0);
+
+  // §29f: while the wall-clock bucket can't pay for a compile, a retry leaves the queue
+  // and the blocks alone (erasing them would only re-translate and re-defer); with the
+  // bucket lever off it drains regardless.
+  const auto erased_paid = cpu.cache.erased.size();
+  cpu.cache.Put(400, 0, &old_entry);
+  s_deferred_wasm_queues[&cpu].Defer(400, 0, &old_entry);
+  g_wall_budget_can_pay = false;
+  RetryDeferredWasmBlocks(cpu);
+  assert(g_wall_budget_asks > 0);
+  assert(cpu.cache.erased.size() == erased_paid);
+  assert(s_deferred_wasm_queues.at(&cpu).Pending() == 1);
+  g_disable_mask = DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET;
+  RetryDeferredWasmBlocks(cpu);
+  assert(cpu.cache.erased.size() == erased_paid + 1);
+  assert(s_deferred_wasm_queues.count(&cpu) == 0);
+  g_disable_mask = 0;
+  g_wall_budget_can_pay = true;
 
   // Disabled JIT discards retry requests without deleting native fallbacks.
   s_wasm_jit_enabled = false;

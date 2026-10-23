@@ -300,9 +300,10 @@ test("committed Dolphin provenance and ABI manifests verify", () => {
   // CachedInterpreterLink.h and WasmDeferredCompileQueue.h -- taking it to
   // 113. The rebase onto Dolphin cf5cb7ef added 0068 (Emscripten
   // LazyMemoryRegion: MemArena.h and MemArenaUnix.cpp), 115; 0069 (the Web
-  // input backend: Web.cpp, Web.h, ControllerInterface.cpp), 118. Update
-  // deliberately when the series changes what it modifies.
-  assert.equal(result.vendorSnapshot.rootPaths, 118);
+  // input backend: Web.cpp, Web.h, ControllerInterface.cpp), 118; 0071 (the IOS
+  // host filesystem's position/size cache: HostBackend/FS.h and File.cpp), 120.
+  // Update deliberately when the series changes what it modifies.
+  assert.equal(result.vendorSnapshot.rootPaths, 120);
   assert.equal(result.vendorSnapshot.submodulePaths, 2);
   assert.equal(result.core.abiVersion, 1);
   assert.equal(result.core.memoryContract.jsGlue.initialPages, 24576);

@@ -125,6 +125,12 @@ public:
 bool s_wasm_jit_enabled = true;
 std::unordered_map<CachedInterpreter*, DeferredJit::Queue> s_deferred_wasm_queues;
 constexpr unsigned COMPILE_THROTTLE_MAX_PER_SLICE = 8;
+// §29f seams the deferred retry asks before it drains: the wall-clock compile bucket
+// (always able to pay here) and the lever that turns it off (never pulled here). The
+// gates build brings its own counting DolphinWebHelperDisabled and drops this one.
+constexpr u32 DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET = 1u << 24;
+bool DolphinWebHelperDisabled(u32) { return false; }  // CACHE_HELPER_STUB
+bool WasmCompileWallBudgetCanPay() { return true; }
 void Host_JitCacheInvalidation() {}
 #define __EMSCRIPTEN__ 1
 /* INTERPRETER_METHODS */

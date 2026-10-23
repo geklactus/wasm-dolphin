@@ -1,0 +1,168 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 06:53:16 +0000
+Subject: [PATCH] 0071-ios-hostfs-fewer-syscalls
+
+
+diff --git a/Source/Core/Core/IOS/FS/HostBackend/FS.h b/Source/Core/Core/IOS/FS/HostBackend/FS.h
+index c54c17bcb4..f53b6de75d 100644
+--- a/Source/Core/Core/IOS/FS/HostBackend/FS.h
++++ b/Source/Core/Core/IOS/FS/HostBackend/FS.h
+@@ -118,6 +118,21 @@ private:
+   FstEntry m_root_entry{};
+   std::string m_root_path;
+   std::map<std::string, std::weak_ptr<File::IOFile>> m_open_files;
++  // wasm-dolphin: what we know about each open host file — the FILE's position and the
++  // file's size — so a guest read or write costs the one syscall it needs instead of six.
++  // Under Emscripten every stdio syscall from the CPU pthread is proxied to the thread
++  // that owns the filesystem and waits for its event loop; a Wii save written or read
++  // in small pieces (Mario Kart Wii's "Saving…" is thousands of them) froze the core
++  // for seconds. Keyed by the IOFile, cleared when it closes (see File.cpp).
++  struct HostFileState
++  {
++    s64 position = -1;  // the FILE's current offset, -1 when unknown
++    s64 size = -1;      // the file's size, -1 when unknown
++  };
++  std::map<const File::IOFile*, HostFileState> m_host_file_state;
++  u64 HostFileSize(File::IOFile& file);
++  void HostFileSeek(File::IOFile& file, u64 offset);
++  void HostFileAdvance(File::IOFile& file, u64 bytes, bool wrote, bool ok);
+   std::array<Handle, 16> m_handles{};
+ 
+   FstEntry m_redirect_fst{};
+diff --git a/Source/Core/Core/IOS/FS/HostBackend/File.cpp b/Source/Core/Core/IOS/FS/HostBackend/File.cpp
+index 5ae6d3cc32..b5a34bd3cb 100644
+--- a/Source/Core/Core/IOS/FS/HostBackend/File.cpp
++++ b/Source/Core/Core/IOS/FS/HostBackend/File.cpp
+@@ -4,6 +4,7 @@
+ #include "Core/IOS/FS/HostBackend/FS.h"
+ 
+ #include <algorithm>
++#include <cstdio>
+ #include <expected>
+ #include <memory>
+ 
+@@ -60,14 +61,23 @@ std::shared_ptr<File::IOFile> HostFileSystem::OpenHostFile(const std::string& ho
+     }
+   }
+ 
++#ifdef __EMSCRIPTEN__
++  // wasm-dolphin: a big stdio buffer, so a save read or written in small pieces reaches
++  // the (proxied, slow) write/read syscalls in 256 KiB runs; the position/size cache below
++  // keeps the seeks that would flush it away.
++  std::setvbuf(file.GetHandle(), nullptr, _IOFBF, 256 * 1024);
++#endif
++
+   // This code will be called when all references to the shared pointer below have been removed.
+   auto deleter = [this, host_path](File::IOFile* ptr) {
++    m_host_file_state.erase(ptr);
+     delete ptr;                     // IOFile's deconstructor closes the file.
+     m_open_files.erase(host_path);  // erase the weak pointer from the list of open files.
+   };
+ 
+   // Use the custom deleter from above.
+   std::shared_ptr<File::IOFile> file_ptr(new File::IOFile(std::move(file)), deleter);
++  m_host_file_state[file_ptr.get()] = HostFileState{0, -1};  // freshly opened: at 0, size unknown
+ 
+   // Store a weak pointer to our newly opened file in the cache.
+   m_open_files[host_path] = std::weak_ptr<File::IOFile>(file_ptr);
+@@ -128,16 +138,18 @@ Result<u32> HostFileSystem::ReadBytesFromFile(Fd fd, u8* ptr, u32 count)
+   if ((u8(handle->mode) & u8(Mode::Read)) == 0)
+     return std::unexpected{ResultCode::AccessDenied};
+ 
+-  const u32 file_size = static_cast<u32>(handle->host_file->GetSize());
++  const u32 file_size = static_cast<u32>(HostFileSize(*handle->host_file));
+   // IOS has this check in the read request handler.
+   if (count + handle->file_offset > file_size)
+     count = file_size - handle->file_offset;
+ 
+   // File might be opened twice, need to seek before we read
+-  handle->host_file->Seek(handle->file_offset, File::SeekOrigin::Begin);
++  HostFileSeek(*handle->host_file, handle->file_offset);
+   const u32 actually_read = static_cast<u32>(fread(ptr, 1, count, handle->host_file->GetHandle()));
++  const bool failed = actually_read != count && ferror(handle->host_file->GetHandle());
++  HostFileAdvance(*handle->host_file, actually_read, false, !failed);
+ 
+-  if (actually_read != count && ferror(handle->host_file->GetHandle()))
++  if (failed)
+     return std::unexpected{ResultCode::AccessDenied};
+ 
+   // IOS returns the number of bytes read and adds that value to the seek position,
+@@ -156,14 +168,49 @@ Result<u32> HostFileSystem::WriteBytesToFile(Fd fd, const u8* ptr, u32 count)
+     return std::unexpected{ResultCode::AccessDenied};
+ 
+   // File might be opened twice, need to seek before we read
+-  handle->host_file->Seek(handle->file_offset, File::SeekOrigin::Begin);
+-  if (!handle->host_file->WriteBytes(ptr, count))
++  HostFileSeek(*handle->host_file, handle->file_offset);
++  const bool ok = handle->host_file->WriteBytes(ptr, count);
++  HostFileAdvance(*handle->host_file, count, true, ok);
++  if (!ok)
+     return std::unexpected{ResultCode::AccessDenied};
+ 
+   handle->file_offset += count;
+   return count;
+ }
+ 
++u64 HostFileSystem::HostFileSize(File::IOFile& file)
++{
++  HostFileState& state = m_host_file_state[&file];
++  if (state.size < 0)
++    state.size = static_cast<s64>(file.GetSize());
++  return static_cast<u64>(state.size);
++}
++
++void HostFileSystem::HostFileSeek(File::IOFile& file, u64 offset)
++{
++  HostFileState& state = m_host_file_state[&file];
++  if (state.position == static_cast<s64>(offset))
++    return;
++  state.position = file.Seek(static_cast<s64>(offset), File::SeekOrigin::Begin) ?
++                       static_cast<s64>(offset) :
++                       -1;
++}
++
++void HostFileSystem::HostFileAdvance(File::IOFile& file, u64 bytes, bool wrote, bool ok)
++{
++  HostFileState& state = m_host_file_state[&file];
++  if (!ok || state.position < 0)
++  {
++    state.position = -1;
++    if (wrote)
++      state.size = -1;
++    return;
++  }
++  state.position += static_cast<s64>(bytes);
++  if (wrote && state.size >= 0 && state.position > state.size)
++    state.size = state.position;
++}
++
+ Result<u32> HostFileSystem::SeekFile(Fd fd, std::uint32_t offset, SeekMode mode)
+ {
+   Handle* handle = GetHandleFromFd(fd);
+@@ -180,14 +227,14 @@ Result<u32> HostFileSystem::SeekFile(Fd fd, std::uint32_t offset, SeekMode mode)
+     new_position = handle->file_offset + offset;
+     break;
+   case SeekMode::End:
+-    new_position = handle->host_file->GetSize() + offset;
++    new_position = HostFileSize(*handle->host_file) + offset;
+     break;
+   default:
+     return std::unexpected{ResultCode::Invalid};
+   }
+ 
+   // This differs from POSIX behaviour which allows seeking past the end of the file.
+-  if (handle->host_file->GetSize() < new_position)
++  if (HostFileSize(*handle->host_file) < new_position)
+     return std::unexpected{ResultCode::Invalid};
+ 
+   handle->file_offset = new_position;
+@@ -201,7 +248,7 @@ Result<FileStatus> HostFileSystem::GetFileStatus(Fd fd)
+     return std::unexpected{ResultCode::Invalid};
+ 
+   FileStatus status;
+-  status.size = handle->host_file->GetSize();
++  status.size = HostFileSize(*handle->host_file);
+   status.offset = handle->file_offset;
+   return status;
+ }

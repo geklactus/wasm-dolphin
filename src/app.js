@@ -312,9 +312,7 @@ function updateRuntimeControls(info) {
                     info.running ? "Pause emulation" : "Resume emulation");
   elements.statusPill.classList.toggle("paused", !info.running);
   audio.update(info.buttonMask, info.running);
-  setTransportGlyph(elements.muteButton,
-                    /unmut/i.test(audio.label()) ? GLYPH.sound : GLYPH.muted,
-                    audio.label(), "Mute or unmute audio");
+  syncMuteGlyph();
 }
 
 function updateDebugMetrics(info) {
@@ -443,11 +441,10 @@ function wireTransport() {
 
   elements.muteButton.addEventListener("click", async () => {
     const muted = !audio.muted;
+    syncMuteGlyph(muted);          // the key answers at once; the transport catches up below
     host.setAudioMuted(muted);
     await audio.setMuted(muted);
-    setTransportGlyph(elements.muteButton,
-                      /unmut/i.test(audio.label()) ? GLYPH.sound : GLYPH.muted,
-                      audio.label(), "Mute or unmute audio");
+    syncMuteGlyph();
   });
 
   elements.fullscreenButton.addEventListener("click", async () => {
@@ -623,6 +620,17 @@ function setTransportGlyph(button, glyph, label, tip) {
   if (tip) button.setAttribute("data-tip", tip);
 }
 
+// The mute key shows the state of the sound, and names the action a press takes.
+// (It used to pick the icon by searching the audio label for "unmute", a word that
+// label never contains — so it showed the muted icon whatever was playing.)
+function syncMuteGlyph(muted = audio.muted) {
+  const off = !audio.available;
+  setTransportGlyph(elements.muteButton,
+                    muted || off ? GLYPH.muted : GLYPH.sound,
+                    off ? "Audio off" : muted ? "Unmute" : "Mute",
+                    off ? "Audio is off" : muted ? "Unmute audio" : "Mute audio");
+}
+
 // Hide the entire side panel, not just the settings block. The game identity
 // it used to carry now lives on the LCD strip in the bezel, so nothing is lost
 // when it is hidden and the screen gets the width back.
@@ -665,9 +673,7 @@ function wireVolumeDial() {
   dial.addEventListener("input", () => {
     audio.setVolume(Number(dial.value) / 100);
     apply();
-    setTransportGlyph(elements.muteButton,
-                      /unmut/i.test(audio.label()) ? GLYPH.sound : GLYPH.muted,
-                      audio.label(), "Mute or unmute audio");
+    syncMuteGlyph();
   });
   apply();
 }
@@ -882,9 +888,7 @@ async function mountFile(file) {
     // plays. Users can still mute via the button.
     if (audio.muted) {
       await audio.setMuted(false);
-      setTransportGlyph(elements.muteButton,
-                        /unmut/i.test(audio.label()) ? GLYPH.sound : GLYPH.muted,
-                        audio.label(), "Mute or unmute audio");
+      syncMuteGlyph();
     }
     host.setAudioMuted(audio.muted);
     syncGameInfo(game);
