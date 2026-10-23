@@ -23,6 +23,7 @@ test("uses the playable startup profile when no URL settings are present", () =>
     forcejit: "0",
     queue: "4",
     fastsw: "1",
+    swthreads: "auto",
     metrics: "0"
   });
 });
@@ -46,6 +47,7 @@ test("reads emulator startup settings from URL search params", () => {
     forcejit: "1",
     queue: "8",
     fastsw: "2",
+    swthreads: "auto",
     metrics: "0"
   });
 });
@@ -69,6 +71,7 @@ test("falls back to supported startup settings for unknown values", () => {
     forcejit: "0",
     queue: "4",
     fastsw: "1",
+    swthreads: "auto",
     metrics: "0"
   });
 });
@@ -88,6 +91,7 @@ test("builds a minimal href by omitting playable default settings", () => {
     forcejit: "0",
     queue: "4",
     fastsw: "1",
+    swthreads: "auto",
     metrics: "0"
   });
 
@@ -109,6 +113,7 @@ test("writes explicit params when settings differ from playable defaults", () =>
     forcejit: "0",
     queue: "8",
     fastsw: "0",
+    swthreads: "auto",
     metrics: "0"
   });
   const url = new URL(href);
@@ -181,4 +186,23 @@ test("describes selected settings for compact display", () => {
     describeSettings({ core: "upstream", video: "ogl", cpu: "dual", wasmjit: "1", jittier: "mixed", forcejit: "1" }),
     "Upstream / OGL / dual CPU / JIT mixed"
   );
+});
+
+test("reads and writes the software rasterizer thread setting", () => {
+  assert.equal(readSettingsFromSearch("").swthreads, "auto");
+  assert.equal(readSettingsFromSearch("?swthreads=auto").swthreads, "auto");
+  assert.equal(readSettingsFromSearch("?swthreads=0").swthreads, "0");
+  assert.equal(readSettingsFromSearch("?swthreads=off").swthreads, "0");
+  assert.equal(readSettingsFromSearch("?swthreads=3").swthreads, "3");
+  // The panel offers up to four workers; larger URL values clamp in the panel only.
+  assert.equal(readSettingsFromSearch("?swthreads=8").swthreads, "4");
+  assert.equal(readSettingsFromSearch("?swthreads=bogus").swthreads, "auto");
+
+  const defaults = readSettingsFromSearch("");
+  const auto = new URL(buildSettingsHref("http://localhost:5173/", defaults));
+  assert.equal(auto.searchParams.get("swthreads"), null);
+  const off = new URL(buildSettingsHref("http://localhost:5173/", { ...defaults, swthreads: "0" }));
+  assert.equal(off.searchParams.get("swthreads"), "0");
+  const two = new URL(buildSettingsHref("http://localhost:5173/", { ...defaults, swthreads: "2" }));
+  assert.equal(two.searchParams.get("swthreads"), "2");
 });

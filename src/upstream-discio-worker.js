@@ -5,6 +5,7 @@ import {
   buildWorkerErrorReply,
   isStrictOneWayWorkerRequest,
   planWorkerSuccessReply,
+  resolveSoftwareRasterThreads,
   sanitizeDiscFileName,
   sha256Hex
 } from "./upstream-worker-protocol.js";
@@ -935,6 +936,7 @@ async function handleMessage(type, payload) {
         oglProxyMode: payload.oglProxyMode,
         oglTestClear: payload.oglTestClear,
         fastSoftwareRaster: payload.fastSoftwareRaster,
+        softwareRasterThreads: payload.softwareRasterThreads,
         softwareTevHotCaseMode: payload.softwareTevHotCaseMode,
         xfbFastPaths: payload.xfbFastPaths,
         correctTimeDrift: payload.correctTimeDrift,
@@ -1461,6 +1463,7 @@ async function loadCore({
   oglProxyMode = "proxy",
   oglTestClear = false,
   fastSoftwareRaster = 0,
+  softwareRasterThreads: requestedSoftwareRasterThreads = "auto",
   softwareTevHotCaseMode: requestedSoftwareTevHotCaseMode = 0,
   xfbFastPaths = 0,
   correctTimeDrift = false,
@@ -1738,6 +1741,20 @@ async function loadCore({
   webGpuCausalStats.mappedDrainCoalescingEnabled = wgpuMappedDrainCoalescingEnabled;
   rendererDiagnostics.requestedVideoBackend = videoBackend;
   softwareTevHotCaseMode = (Number(requestedSoftwareTevHotCaseMode) || 0) & 3;
+  const softwareRasterThreads = resolveSoftwareRasterThreads(requestedSoftwareRasterThreads, {
+    videoBackend
+  });
+  rendererDiagnostics.softwareRasterThreads = {
+    requested: requestedSoftwareRasterThreads,
+    resolved: softwareRasterThreads,
+    hardwareConcurrency: Number(globalThis.navigator?.hardwareConcurrency) || 0
+  };
+  if (videoBackend === "Software Renderer") {
+    postStatus(
+      `Software rasterizer threads: ${softwareRasterThreads} worker(s) + GPU thread ` +
+      `(requested ${requestedSoftwareRasterThreads}, ${rendererDiagnostics.softwareRasterThreads.hardwareConcurrency} logical cores)`
+    );
+  }
   rendererDiagnostics.requestedPresenterBackend = normalizePresenterBackend(presenterBackend);
   oglSabEnabledForLoad = Boolean(oglSabEnabled);
 
@@ -1924,6 +1941,9 @@ async function loadCore({
     dolphinOglReadbackPresent: readbackOgl,
     dolphinOglTestClear: Boolean(oglTestClear),
     dolphinFastSoftwareRaster: Math.min(3, Math.max(0, Number(fastSoftwareRaster) || 0)),
+    // Software rasterizer worker threads (Rasterizer::Init starts them at boot; the count is
+    // fixed for the run). Resolved here so the decision sees this worker's hardwareConcurrency.
+    dolphinSoftwareRasterThreads: softwareRasterThreads,
     dolphinXfbFastPaths: (Number(xfbFastPaths) || 0) & 3,
     // Read by dolphin_web_core.cpp at CoreInit. Both are opt-in and default
     // false, so the shipping page load is unchanged.

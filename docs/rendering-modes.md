@@ -33,6 +33,12 @@ software rasterization stage and are useful fallbacks or diagnostics.
 `fastsw=3` use more aggressive raster/encode approximations; they can raise
 distinct-frame cadence but are not guaranteed to raise game speed.
 
+`swthreads=auto` (default) rasterizes each draw batch across worker threads by
+horizontal EFB bands; `swthreads=0` is the single-threaded upstream rasterizer
+and `swthreads=N` forces `N` workers (1-8). The image is identical in every
+mode; only the time per frame changes. See
+[software raster threads](software-raster-threads.md).
+
 ## Hardware and diagnostic paths
 
 `video=wgpu` routes Dolphin draw work through the experimental WebGPU hardware
