@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 08:32:11 +0000
+Subject: [PATCH] 0073-compile-budget-no-lockout
+
+
+diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index c85069c7aa..07f19ebd7f 100644
+--- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
++++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+@@ -306,6 +306,16 @@ constexpr u32 COMPILE_THROTTLE_MAX_US_PER_SLICE = 4000;
+ // (interpreted now, retried next slice).
+ constexpr u32 COMPILE_WALL_BUDGET_PERCENT = 40;
+ constexpr s64 COMPILE_WALL_BUDGET_CAP_US = 30000;   // the most that can be banked (one burst of ~30 ms)
++// §29f: the most the bucket is asked to hold before a compile may go. The estimate of a
++// compile's cost is an average of what the last ones took, and when V8's compile threads
++// are busy elsewhere (the disc worker seeding a prebuilt cache compiles thousands of
++// modules at once) one synchronous compile on this thread can take 100+ ms; an estimate
++// above the cap then rejected every compile for the rest of the session — the JIT stuck
++// at the blocks it had, the interpreter at 10% speed. Asking for at most half the cap
++// means a slow spell slows compiling down, never stops it: the bucket refills past the
++// ask in (cap/2) / percent of wall time, one compile goes, and the estimate follows the
++// real cost back down as soon as compiles are quick again.
++constexpr s64 COMPILE_WALL_BUDGET_MAX_ASK_US = COMPILE_WALL_BUDGET_CAP_US / 2;
+ 
+ inline bool DolphinWebHelperDisabled(u32 bit)
+ {
+@@ -403,6 +413,29 @@ std::atomic<s64> s_wasm_compile_wall_budget_us{COMPILE_WALL_BUDGET_CAP_US};
+ s64 s_wasm_compile_wall_budget_last_us = 0;
+ std::atomic<u32> s_wasm_compile_wall_recent_us{1500};   // running estimate of one compile's cost
+ std::atomic<u32> s_wasm_compile_wall_budget_reject_count{0};
++// §29a/§29f: refill the bucket for the wall time since the last look and say whether it
++// can pay for a compile of about the recent size (asked for at most
++// COMPILE_WALL_BUDGET_MAX_ASK_US). One clock read per call. CPU pthread only.
++bool WasmCompileWallBudgetCanPay()
++{
++  const s64 now_us = static_cast<s64>(
++      std::chrono::duration_cast<std::chrono::microseconds>(
++          std::chrono::steady_clock::now().time_since_epoch())
++          .count());
++  s64 balance = s_wasm_compile_wall_budget_us.load(std::memory_order_relaxed);
++  if (s_wasm_compile_wall_budget_last_us != 0 && now_us > s_wasm_compile_wall_budget_last_us)
++  {
++    balance += (now_us - s_wasm_compile_wall_budget_last_us) * COMPILE_WALL_BUDGET_PERCENT / 100;
++    if (balance > COMPILE_WALL_BUDGET_CAP_US)
++      balance = COMPILE_WALL_BUDGET_CAP_US;
++    s_wasm_compile_wall_budget_us.store(balance, std::memory_order_relaxed);
++  }
++  s_wasm_compile_wall_budget_last_us = now_us;
++  const s64 ask = std::min<s64>(
++      static_cast<s64>(s_wasm_compile_wall_recent_us.load(std::memory_order_relaxed)),
++      COMPILE_WALL_BUDGET_MAX_ASK_US);
++  return balance >= ask;
++}
+ // §28ce stats: cumulative throttle rejects, peak burst (max compiles
+ // observed in any one slice), peak compile-time burst (max us observed
+ // in any one slice). All atomic for cross-thread read by stats.
+@@ -495,6 +528,13 @@ void RetryDeferredWasmBlocks(CachedInterpreter& cpu)
+   auto found = s_deferred_wasm_queues.find(&cpu);
+   if (found == s_deferred_wasm_queues.end())
+     return;
++  // §29f: a retry erases the block so its next run re-translates it and tries the wasm
++  // compile again. While the wall-clock bucket can't pay for one, that re-translation is
++  // the whole cost and the block is deferred straight back — 64 of them every slice, for
++  // nothing. Leave the queue alone until the bucket has refilled.
++  if (!DolphinWebHelperDisabled(DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET) &&
++      !WasmCompileWallBudgetCanPay())
++    return;
+   found->second.Drain(COMPILE_THROTTLE_MAX_PER_SLICE, [&cpu](const DeferredJit::Entry& entry) {
+     auto* cache = cpu.GetBlockCache();
+     const auto flags = static_cast<CPUEmuFeatureFlags>(entry.features);
+@@ -10706,6 +10746,13 @@ DOLPHIN_WEB_DIRECT_WASM_BLOCK_INLINE s32 CachedInterpreter::RunWasmBlock(
+ 
+ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
+ {
++  // §29f: a JIT that is off (the host's fuse, or the lever) has nothing to throttle or
++  // defer — these two were below the throttles, so a disabled JIT still paid a clock read
++  // and a queue insert for every block the interpreter ran.
++  if (DolphinWebHelperDisabled(DOLPHIN_WEB_DISABLE_WASMBLOCK))
++    return false;
++  if (!s_wasm_jit_enabled)
++    return false;
+   // §28ce burst smearing: when ENABLED (gate bit CLEARED), reject early if
+   // we've already burned this slice's compile budget. Falls to Interpret;
+   // next slice will re-attempt this block (one extra Interpret cost per
+@@ -10726,20 +10773,7 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
+   // about the recent size. One clock read per compile attempt, not per block run.
+   if (!DolphinWebHelperDisabled(DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET))
+   {
+-    const s64 now_us = static_cast<s64>(
+-        std::chrono::duration_cast<std::chrono::microseconds>(
+-            std::chrono::steady_clock::now().time_since_epoch())
+-            .count());
+-    s64 balance = s_wasm_compile_wall_budget_us.load(std::memory_order_relaxed);
+-    if (s_wasm_compile_wall_budget_last_us != 0 && now_us > s_wasm_compile_wall_budget_last_us)
+-    {
+-      balance += (now_us - s_wasm_compile_wall_budget_last_us) * COMPILE_WALL_BUDGET_PERCENT / 100;
+-      if (balance > COMPILE_WALL_BUDGET_CAP_US)
+-        balance = COMPILE_WALL_BUDGET_CAP_US;
+-      s_wasm_compile_wall_budget_us.store(balance, std::memory_order_relaxed);
+-    }
+-    s_wasm_compile_wall_budget_last_us = now_us;
+-    if (balance < static_cast<s64>(s_wasm_compile_wall_recent_us.load(std::memory_order_relaxed)))
++    if (!WasmCompileWallBudgetCanPay())
+     {
+       s_wasm_compile_wall_budget_reject_count.fetch_add(1, std::memory_order_relaxed);
+       s_deferred_wasm_queues[this].Defer(js.blockStart,
+@@ -10753,11 +10787,6 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
+   const u32 MIN_WASM_PREFIX_INSTRUCTIONS =
+       DolphinWebHelperDisabled(DOLPHIN_WEB_DISABLE_SHORT_PREFIX) ? 4u : 2u;
+ 
+-  if (DolphinWebHelperDisabled(DOLPHIN_WEB_DISABLE_WASMBLOCK))
+-    return false;
+-  if (!s_wasm_jit_enabled)
+-    return false;
+-
+   if (IsProfilingEnabled())
+   {
+     LogWasmBlockReject("profiling", nullptr, 0, js.blockStart, code_block.m_num_instructions);

@@ -9,6 +9,9 @@ OWN = Path(__file__).resolve().parent
 utilities = runpy.run_path(str(OWN / 'build-helpers.py'))
 candidate, function = utilities['candidate'], utilities['function']
 source = (OWN / 'helpers.cpp').read_text(encoding='utf8').replace('int main()\n', 'int HelperFixtureMain()\n')
+# gate.template.cpp defines the counting DolphinWebHelperDisabled the gate cases assert on.
+source = source.replace('bool DolphinWebHelperDisabled(u32) { return false; }  // CACHE_HELPER_STUB\n', 'bool DolphinWebHelperDisabled(u32);\n')
+assert 'CACHE_HELPER_STUB' not in source
 machine = '''namespace CPU { enum class State { Running, Stepping, PowerDown }; }
 struct Machine {
   struct CPUState { CPU::State state = CPU::State::Running; const CPU::State* pointer = &state;
