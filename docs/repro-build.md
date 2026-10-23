@@ -36,6 +36,10 @@ The Windows lock above is `provenance/wasm-toolchain.lock.json`; Linux has its o
 for the platform it runs on. A new platform lock starts with `null` hashes:
 `npm run record:toolchain` fills them from the installed tools (still checking every
 version and commit), and from then on the hashes are verified like the Windows ones.
+The hashes cover what shapes the core — Node, emcc, emcmake, clang++, CMake, Ninja, rustc,
+cargo. `rustup` is located (it is how the toolchain's `rust-src` is checked) but not hashed:
+it installs the Rust toolchain and does not touch the core, and the runner image replaces
+it on its own schedule.
 
 `.github/workflows/build-core.yml` builds the core on an `ubuntu-24.04` runner from
 those pins — emsdk at the locked commit, CMake and Ninja from PyPI, the Rust nightly with
@@ -132,8 +136,8 @@ baked core:
 
 | Artifact | Canonical size | SHA-256 |
 | --- | ---: | --- |
-| `dolphin-core-upstream.js` | 266,986 normalized bytes | `91ed938e1401e10a53bf81d4c66dcfe73b051673ce18f1ad78303730ddbb1969` |
-| `dolphin-core-upstream.wasm` | 13,003,347 bytes | `86c687f770dbb88a6b5c41958c3d66a8d5d94a717abaaff58a18814c992496a5` |
+| `dolphin-core-upstream.js` | 267,065 normalized bytes | `f8c1711955ef7343b2db37a38e7e7d41136b4cbd39db58abbd100b706ead500b` |
+| `dolphin-core-upstream.wasm` | 13,220,659 bytes | `d265bc433ed5c58d8beaeb862fd4634d484eb15aa4cf37eec6e4bb53677b23a6` |
 
 The JS digest is calculated after CRLF-to-LF normalization, and
 `.gitattributes` requires LF for core JS files. This prevents checkout line

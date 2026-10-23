@@ -45,7 +45,6 @@
     "cargoVersion": "1.97.0-nightly",
     "cargoCommit": "a343accce8526b128adc517d33348573d22920a3",
     "cargoSha256": "f81d732063358c4f517b9ab7b24807b8a6eac884c05220a7b184d726fac8bce1",
-    "rustupSha256": "86478e53f769379d7f0ebfa7c9aa97cb76ca92233f79aa2cc0dbee2efaac73c7",
     "rustSrcRequired": true,
     "target": "wasm32-unknown-emscripten",
     "rustcCandidates": [

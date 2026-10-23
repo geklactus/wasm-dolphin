@@ -68,7 +68,11 @@ function pathCandidate(command) {
   return lookup.stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? null;
 }
 
-function resolveTool(label, envName, candidates, expectedSha256, pathCommand, recorded) {
+// Finds a tool and, unless { hashed: false }, checks its SHA-256 against the lock (or
+// records it). A tool is hashed when its bytes shape the core; one that only locates or
+// installs the others (rustup) is found but not hashed, so an image refresh of that
+// binary alone does not break the lock.
+function resolveTool(label, envName, candidates, expectedSha256, pathCommand, recorded, { hashed = true } = {}) {
   const attempted = [];
   const values = [
     process.env[envName],
@@ -80,6 +84,7 @@ function resolveTool(label, envName, candidates, expectedSha256, pathCommand, re
     const path = resolve(value);
     attempted.push(path);
     if (!existsSync(path)) continue;
+    if (!hashed) return path;
     const actual = sha256File(path);
     if (recorded) {
       recorded.set(label, actual);
@@ -119,9 +124,11 @@ export function loadWasmToolchainLock() {
   return JSON.parse(readFileSync(lockPath, "utf8"));
 }
 
-// Verifies the installed toolchain against the platform's lock: every binary by hash, every
-// tool by the version and commit it reports, Emscripten by its emsdk commit, Rust by its
-// toolchain having rust-src, and the Naga bridge by its Cargo.lock and sources.
+// Verifies the installed toolchain against the platform's lock: every compiler binary by
+// hash, every tool by the version and commit it reports, Emscripten by its emsdk commit,
+// Rust by its toolchain having rust-src (rustup itself is located but not hashed: it
+// installs the toolchain and does not touch the core), and the Naga bridge by its
+// Cargo.lock and sources.
 //
 // With { record: true } the binary hashes are taken from the installed tools instead of
 // checked, and written back to the lock; the version, commit and source checks still apply.
@@ -140,7 +147,7 @@ export function verifyWasmToolchain({ record = false } = {}) {
   const ninja = resolveTool("Ninja", "NINJA", lock.ninja.candidates, lock.ninja.sha256, `ninja${executableSuffix}`, recorded);
   const rustc = resolveTool("rustc", "RUSTC", lock.rust.rustcCandidates, lock.rust.rustcSha256, null, recorded);
   const cargo = resolveTool("cargo", "CARGO", lock.rust.cargoCandidates, lock.rust.cargoSha256, null, recorded);
-  const rustup = resolveTool("rustup", "RUSTUP", lock.rust.rustupCandidates, lock.rust.rustupSha256, `rustup${executableSuffix}`, recorded);
+  const rustup = resolveTool("rustup", "RUSTUP", lock.rust.rustupCandidates, null, `rustup${executableSuffix}`, recorded, { hashed: false });
 
   requireText("Node", runVersion(node, ["--version"]), `v${lock.node.version}`);
   const emccVersion = runVersion(emcc, ["--version"]);
@@ -199,7 +206,7 @@ export function verifyWasmToolchain({ record = false } = {}) {
     lock.ninja.sha256 = recorded.get("Ninja");
     lock.rust.rustcSha256 = recorded.get("rustc");
     lock.rust.cargoSha256 = recorded.get("cargo");
-    lock.rust.rustupSha256 = recorded.get("rustup");
+    delete lock.rust.rustupSha256;
     writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
   }
 

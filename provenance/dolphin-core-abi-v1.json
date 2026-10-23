@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "abiVersion": 1,
-  "coreId": "sha256:86c687f770dbb88a6b5c41958c3d66a8d5d94a717abaaff58a18814c992496a5",
+  "coreId": "sha256:d265bc433ed5c58d8beaeb862fd4634d484eb15aa4cf37eec6e4bb53677b23a6",
   "upstreamCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
   "artifacts": [
     {
       "path": "cores/dolphin/dolphin-core-upstream.js",
       "hashMode": "lf-normalized",
-      "size": 266986,
-      "sha256": "91ed938e1401e10a53bf81d4c66dcfe73b051673ce18f1ad78303730ddbb1969"
+      "size": 267065,
+      "sha256": "f8c1711955ef7343b2db37a38e7e7d41136b4cbd39db58abbd100b706ead500b"
     },
     {
       "path": "cores/dolphin/dolphin-core-upstream.wasm",
-      "size": 13003347,
-      "sha256": "86c687f770dbb88a6b5c41958c3d66a8d5d94a717abaaff58a18814c992496a5"
+      "size": 13220659,
+      "sha256": "d265bc433ed5c58d8beaeb862fd4634d484eb15aa4cf37eec6e4bb53677b23a6"
     }
   ],
   "contractSources": [
@@ -38,14 +38,14 @@
     {
       "path": "core/upstream/dolphin_web_core.cpp",
       "hashMode": "lf-normalized",
-      "size": 44803,
-      "sha256": "0b7220487717ebed29695b031e8779c218771926e12ffe0c102675aba7ad803f"
+      "size": 46933,
+      "sha256": "7deb8d0edcc060daea1d760bed4a95ee313c3bdc8ae6f2a4c2df7ea4bd6a8781"
     },
     {
       "path": "src/app.js",
       "hashMode": "lf-normalized",
-      "size": 48697,
-      "sha256": "0a6c2ffeda21cf0966b37292c39848848198127b83e059c61bb4d03d9e9e6cfc"
+      "size": 51556,
+      "sha256": "83449d170fcb51272f40da33053f81898360d97a76460617d1a8da86f900ebf3"
     },
     {
       "path": "src/audio.js",
@@ -80,8 +80,8 @@
     {
       "path": "src/core-host.js",
       "hashMode": "lf-normalized",
-      "size": 65547,
-      "sha256": "9b40c4f53484b1cc0ba8a87d52de9d14be357cbf41e887fb9984bb9beeb3ef72"
+      "size": 65723,
+      "sha256": "7d38c3c481bef7438d3a8fdb104c872c3a150a25b266b00ff58785b627f04917"
     },
     {
       "path": "src/diagnostic-log-filter.js",
@@ -104,8 +104,8 @@
     {
       "path": "src/input-transport.js",
       "hashMode": "lf-normalized",
-      "size": 2802,
-      "sha256": "4890d0a507543bf0e8d2f71ad10b72fa2775fb1b571b13e05f2225127a6facfa"
+      "size": 5482,
+      "sha256": "f9447792be016329bcb74fe0e92e2d5b07c6d366c6cdb74675642ac32395c50d"
     },
     {
       "path": "src/input-visual-marker.js",
@@ -134,8 +134,8 @@
     {
       "path": "src/upstream-discio-worker.js",
       "hashMode": "lf-normalized",
-      "size": 617538,
-      "sha256": "681a26e5aebedf3eb054c5ca8ec5a8b66445b15873c155e30e0b62ad3e0626a0"
+      "size": 619621,
+      "sha256": "befc380931e4cee12def5d92987c89655fe012d736da278e561c1dcd1416b11b"
     },
     {
       "path": "src/wgpu-renderer-worker-probe.js",
@@ -152,20 +152,20 @@
     {
       "path": "src/upstream-main-thread-adapter.js",
       "hashMode": "lf-normalized",
-      "size": 20246,
-      "sha256": "bd719473098f192545148df4733ec9539bd4300e19753c5e04098d1484312133"
+      "size": 21232,
+      "sha256": "e14f1b114a17cc55e7d3f16b8d12e82a3a0fbdf5f2d35ad87548636bb5704cdd"
     },
     {
       "path": "src/upstream-worker-adapter.js",
       "hashMode": "lf-normalized",
-      "size": 41656,
-      "sha256": "de15d26f0586ad7864472fdea784d934d63f2790993967780cccf2a7ae638aa4"
+      "size": 43024,
+      "sha256": "5d51c0583299d61d4323db05dd85977226804996e8d077b09d70a24d18bbf7cf"
     },
     {
       "path": "src/upstream-worker-protocol.js",
       "hashMode": "lf-normalized",
-      "size": 5096,
-      "sha256": "58c0dd65260a7def40b9201b7030d03f0a5e89963be0af0eeb496b23714dbebc"
+      "size": 5117,
+      "sha256": "7b9d5d07f9d590e2f02ae2004ab8884f498bd0b126f4b66ae2cebfccae2ce0e3"
     },
     {
       "path": "src/wgpu-pass-state-cache.js",
@@ -479,6 +479,7 @@
     "_SetWebGpuUploadArenaMiB",
     "_SetWgpuDeepDiagnosticsEnabled",
     "_SetWgpuIdleFifoTailElisionEnabled",
+    "_SetWiimoteState",
     "_SetXfbFastPaths",
     "_StopCore",
     "_TestDcbxLoopPattern",
@@ -525,6 +526,7 @@
       "setAudioMuted",
       "setInputMask",
       "setInputState",
+      "setWiimoteState",
       "validationBeginWgpuRendererProbeMeasurement",
       "validationFinalizeWgpuMappedDrain",
       "validationFinalizeWgpuRendererProbe",

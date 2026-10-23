@@ -3,8 +3,8 @@
   "normalization": "git-blob-lf",
   "root": {
     "baseCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
-    "resultTree": "534dc8e2e50ec168d31a83bf2b9a96e8ae641863",
-    "changedPathCount": 115,
+    "resultTree": "23cc45b7a53a223075a702fc1d881cecaf6505ee",
+    "changedPathCount": 118,
     "records": [
       {
         "path": "CMakeLists.txt",
@@ -200,9 +200,9 @@
         "status": "M",
         "mode": "100644",
         "baseBlob": "56c8dba3de8f1a653c57d65488215616f60ce445",
-        "resultBlob": "b4ba1e46e5e152533d79042308c644b40e71a472",
-        "size": 31711,
-        "sha256": "39bd3f39d159ae6d02bdb5deacc9f5b14bdd15ba30bbc9d3e54cc2913d1d1769"
+        "resultBlob": "2c628161f1556f81a9bc25611905e000c6fc4cad",
+        "size": 31730,
+        "sha256": "52e5bd1c242d975a0416d01ca579bb9d79532c12eedfcf0f4f0f05d2d0567566"
       },
       {
         "path": "Source/Core/Core/Core.cpp",
@@ -434,9 +434,36 @@
         "status": "M",
         "mode": "100644",
         "baseBlob": "5cc6b66ca6f07c2a3c41812e6f07f65d4c447d67",
-        "resultBlob": "036aa2ef9b044dd0443a060b8a648e15bf862fde",
-        "size": 6377,
-        "sha256": "a9cf4000dc76eb99365938698d56c2eb3c5df023b3765ebea8e8b2764247239f"
+        "resultBlob": "b4a114197049d93068de497b260a7e9255c92849",
+        "size": 6579,
+        "sha256": "b889b7f78e477231633f97964be2662e8a8fd123c1c4b209846bd2d6aed6acd9"
+      },
+      {
+        "path": "Source/Core/InputCommon/ControllerInterface/ControllerInterface.cpp",
+        "status": "M",
+        "mode": "100644",
+        "baseBlob": "20fd517b2db3499a8ec8415cac4aee8284c993c9",
+        "resultBlob": "dbc73c3827c057569bed936558776ff89cb8a649",
+        "size": 14150,
+        "sha256": "462abf562c65fdf8cdabb38f214146b22f79c23acdd8b1302e9a437f6b8a8ca4"
+      },
+      {
+        "path": "Source/Core/InputCommon/ControllerInterface/Web/Web.cpp",
+        "status": "A",
+        "mode": "100644",
+        "baseBlob": null,
+        "resultBlob": "944760485b6869f7896a99972b8dadbd922c3250",
+        "size": 7756,
+        "sha256": "ebdef552fcb71c830f912ab86979e287262ef98a6e1b5d76f94021eede666e30"
+      },
+      {
+        "path": "Source/Core/InputCommon/ControllerInterface/Web/Web.h",
+        "status": "A",
+        "mode": "100644",
+        "baseBlob": null,
+        "resultBlob": "25d6fd49384deb4b0873e2d728f736ef008e488c",
+        "size": 2529,
+        "sha256": "61bdebf74bf779bed65b31db566ebb45efd31f61d6a48e688c9a752aab7455f0"
       },
       {
         "path": "Source/Core/InputCommon/GCAdapter.cpp",
@@ -1077,5 +1104,5 @@
       ]
     }
   ],
-  "contentSha256": "d08e8c0b12406adeb666d3c09e70eb96f9a038027e33b5d3bc6e6c1749993660"
+  "contentSha256": "04b37d2ef08cfba439fb96ba4aa044318b3646069d1379038d0bb7006f677c16"
 }

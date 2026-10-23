@@ -20,6 +20,7 @@
 #include "Common/CommonPaths.h"
 #include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
+#include "Common/IOFile.h"
 #include "Common/HookableEvent.h"
 #include "Common/Logging/LogManager.h"
 #include "Common/MsgHandler.h"
@@ -38,6 +39,7 @@
 #include "Core/HW/EXI/EXI_Device.h"
 #include "Core/HW/GCKeyboard.h"
 #include "Core/HW/GCPad.h"
+#include "Core/HW/Wiimote.h"
 #include "Core/HW/SystemTimers.h"
 #include "Core/Host.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -531,6 +533,58 @@ void CreateDirectoryIfNeeded(const std::string& path)
     File::CreateFullPath(path);
 }
 
+// Wii Remote 1 is the browser's "Web/0/Wii Remote" device (ciface::Web, patch 0069). The
+// mapping is an ordinary WiimoteNew.ini in the user's config directory, written once when the
+// MEMFS user directory is fresh, so a profile the page supplies later wins over it. Buttons,
+// D-pad, pointing (the pointer over the game, Cursor X/Y; hidden when it leaves), shake, and a
+// Nunchuk with its stick. Motion (Accel/Gyro) is deliberately unmapped: the emulated Wii Remote
+// then derives acceleration from its own Tilt/Swing/Shake emulation, which is right when the
+// page has no motion sensor to report. Wii Remotes 2-4 keep Dolphin's default source, none.
+static void WriteDefaultWiimoteProfile()
+{
+  static constexpr const char* PROFILE = R"(# Written by wasm-dolphin (core/upstream/dolphin_web_core.cpp).
+# Wii Remote 1 is the page's input: the keyboard, mouse or touch pointer, and gamepads.
+[Wiimote1]
+Device = Web/0/Wii Remote
+Source = 1
+Buttons/A = `A`
+Buttons/B = `B`
+Buttons/1 = `1`
+Buttons/2 = `2`
+Buttons/- = `-`
+Buttons/+ = `+`
+Buttons/Home = `HOME`
+D-Pad/Up = `Up`
+D-Pad/Down = `Down`
+D-Pad/Left = `Left`
+D-Pad/Right = `Right`
+IR/Up = `Cursor Y-`
+IR/Down = `Cursor Y+`
+IR/Left = `Cursor X-`
+IR/Right = `Cursor X+`
+IR/Hide = `Cursor Hidden`
+Shake/X = `Shake`
+Shake/Y = `Shake`
+Shake/Z = `Shake`
+Extension = Nunchuk
+Nunchuk/Buttons/C = `Nunchuk C`
+Nunchuk/Buttons/Z = `Nunchuk Z`
+Nunchuk/Stick/Up = `Nunchuk Y+`
+Nunchuk/Stick/Down = `Nunchuk Y-`
+Nunchuk/Stick/Left = `Nunchuk X-`
+Nunchuk/Stick/Right = `Nunchuk X+`
+Nunchuk/Shake/X = `Nunchuk Shake`
+Nunchuk/Shake/Y = `Nunchuk Shake`
+Nunchuk/Shake/Z = `Nunchuk Shake`
+)";
+  const std::string path = File::GetUserPath(D_CONFIG_IDX) + "WiimoteNew.ini";
+  if (File::Exists(path))
+    return;
+  File::CreateFullPath(path);
+  File::IOFile file(path, "wb");
+  if (!file.IsOpen() || !file.WriteBytes(PROFILE, std::strlen(PROFILE)))
+    ERROR_LOG_FMT(CORE, "Could not write the Wii Remote profile to {}", path);
+}
 void EnsureRuntime()
 {
   if (s_runtime_initialized)
@@ -646,6 +700,8 @@ void EnsureRuntime()
   Pad::Initialize();
   Pad::InitializeGBA();
   Keyboard::Initialize();
+  WriteDefaultWiimoteProfile();
+  Wiimote::Initialize(Wiimote::InitializeMode::DO_NOT_WAIT_FOR_WIIMOTES);
 
   // §27 savestate-load backend resync. Probe evidence: after
   // State::Load the WebGPU command-ring producer (the dual-core GPU
