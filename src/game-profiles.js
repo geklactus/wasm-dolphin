@@ -48,8 +48,14 @@ export const GAME_PROFILES = {
   // software reference at a matched emulated frame. What is left is speed --
   // hardware averages ~44% against software's ~100% on that same state -- so
   // software stays the default on performance, not on correctness.
+  //
+  // Vendor patch 0074 (2026-10-23) then fixed the depth convention that left fog,
+  // z-texture depth and EFB depth copies inverted on the hardware path -- the
+  // effects 3D gameplay uses and menus do not. It has not been verified by eye on
+  // a GPU yet, so both titles stay here until it is; see
+  // docs/webgpu-hardware-renderer-bugs.md, first section, for what to check.
   RMCE01: { renderer: "software", why: "44% vs ~100% game speed; hardware renders correctly but is slower" },
-  SOUE01: { renderer: "software", why: "hardware unverified in gameplay; no Wii Remote input yet" }
+  SOUE01: { renderer: "software", why: "hardware unverified in gameplay since the 0074 depth fix" }
 };
 
 // Where the GameCube disc header (and so the 6-character game id) sits in each

@@ -69,6 +69,7 @@ export class UpstreamWorkerAdapter {
     frameCap = 0,
     cachedInterpreterDisableMask = 0,
     wgpuScissoredClearRect = true,
+    wgpuLegacyDepth = false,
     noJitCache = false,
     collectMetrics = false,
     legacyOneWayAck = false,
@@ -165,6 +166,7 @@ export class UpstreamWorkerAdapter {
     this.frameCap = Number(frameCap) || 0;
     this.cachedInterpreterDisableMask = (Number(cachedInterpreterDisableMask) || 0) >>> 0;
     this.wgpuScissoredClearRect = wgpuScissoredClearRect !== false;
+    this.wgpuLegacyDepth = wgpuLegacyDepth === true;
     this.noJitCache = Boolean(noJitCache);
     this.collectMetrics = Boolean(collectMetrics);
     this.legacyOneWayAck = Boolean(legacyOneWayAck);
@@ -374,6 +376,7 @@ export class UpstreamWorkerAdapter {
       frameCap: this.frameCap,
       cachedInterpreterDisableMask: this.cachedInterpreterDisableMask,
       wgpuScissoredClearRect: this.wgpuScissoredClearRect,
+      wgpuLegacyDepth: this.wgpuLegacyDepth,
       noJitCache: this.noJitCache,
       collectMetrics: this.collectMetrics,
       legacyOneWayAck: this.legacyOneWayAck,

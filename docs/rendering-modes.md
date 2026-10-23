@@ -16,6 +16,8 @@ software-rendered framebuffer reaches the browser canvas.
 | `video=wgpu` | True WebGPU hardware renderer | Experimental | Fixed battle renders on the validation GPU; remains slow and GPU-dependent |
 | `video=ogl` | OGL/WebGL2-style path | Experimental/diagnostic | JIT defaults differ here |
 | `oglsab=1` | SharedArrayBuffer pixel transport for OGL readback | Diagnostic | Requires cross-origin isolation |
+| `wgpuclearrect=0` | Hardware renderer: disable the scissored in-pass EFB clear | Bisection only | Restores the over-clearing legacy path (patchwork Mario Kart Wii frame) |
+| `wgpudepthlegacy=1` | Hardware renderer: the pre-0074 depth convention (fog, z-texture depth and EFB depth copies inverted; clear depth hard-coded) | Bisection only | A/B against the default on a title whose 3D gameplay looks wrong |
 
 ## Software-hybrid path
 

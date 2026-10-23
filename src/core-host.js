@@ -111,6 +111,7 @@ export class EmulatorHost {
     this.wgpuScissoredClearRect = requestedWgpuScissoredClearRect(
       this.cachedInterpreterDisableMask
     );
+    this.wgpuLegacyDepth = requestedWgpuLegacyDepth();
     this.noJitCache =
       new URLSearchParams(window.location.search).get("nojitcache") === "1";
     this.collectMetrics = requestedCollectMetrics();
@@ -393,6 +394,7 @@ export class EmulatorHost {
             frameCap: this.frameCap,
             cachedInterpreterDisableMask: this.cachedInterpreterDisableMask,
             wgpuScissoredClearRect: this.wgpuScissoredClearRect,
+            wgpuLegacyDepth: this.wgpuLegacyDepth,
             noJitCache: this.noJitCache,
             collectMetrics: this.collectMetrics,
             legacyOneWayAck: this.legacyOneWayAck,
@@ -1445,6 +1447,16 @@ function requestedWgpuScissoredClearRect(disableMask) {
   if (raw === "0") return false;
   if (raw === "1") return true;
   return ((disableMask >>> 0) & LEGACY_DISABLE_BIT_CLEARRECT_OFF) === 0;
+}
+
+// The WebGPU backend's depth convention before vendor patch 0074: the EFB held
+// reverse-Z depth but fog, per-pixel depth, EFB depth copies, EFB peeks/pokes
+// and clear values were not converted to match, which inverted those effects
+// on the hardware path. `?wgpudepthlegacy=1` restores that core behaviour for
+// an A/B on a real title; it is a bisection knob, not a fallback.
+function requestedWgpuLegacyDepth() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("wgpudepthlegacy") === "1";
 }
 
 function requestedCachedInterpreterDisableMask() {
