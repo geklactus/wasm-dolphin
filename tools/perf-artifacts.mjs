@@ -833,7 +833,6 @@ export function validateLockedBuildProvenance(provenance = {}) {
     ["ninja.sha256", toolchainLock?.ninja?.sha256],
     ["rust.rustcSha256", toolchainLock?.rust?.rustcSha256],
     ["rust.cargoSha256", toolchainLock?.rust?.cargoSha256],
-    ["rust.rustupSha256", toolchainLock?.rust?.rustupSha256],
     ["naga.cargoLockSha256", toolchainLock?.naga?.cargoLockSha256],
   ]) require(sha(value), `locked.toolchainLock.${label}`);
 

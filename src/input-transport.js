@@ -63,3 +63,70 @@ function requireInputStateView(view) {
     throw new TypeError(`input state transport requires ${INPUT_STATE_SLOT_COUNT} Int32 slots`);
   }
 }
+
+// Wii Remote 1 (src/wiimote.js), on the same seqlock scheme. Slots: 0=buttons, 1..10 the
+// analog fields as fixed point (×WIIMOTE_FIXED_POINT_SCALE), 11=generation, 12=Date.now() low
+// 32 bits, 15=odd/even seqlock.
+export const WIIMOTE_STATE_SLOT_COUNT = 16;
+export const WIIMOTE_STATE_SEQUENCE_SLOT = 15;
+export const WIIMOTE_FIXED_POINT_SCALE = 10000;
+const WIIMOTE_ANALOG_FIELDS = Object.freeze([
+  "cursorX",
+  "cursorY",
+  "stickX",
+  "stickY",
+  "accelRight",
+  "accelForward",
+  "accelUp",
+  "gyroPitch",
+  "gyroRoll",
+  "gyroYaw"
+]);
+
+export function writeWiimoteStateSnapshot(view, state = {}) {
+  requireWiimoteStateView(view);
+  const previousSequence = Atomics.load(view, WIIMOTE_STATE_SEQUENCE_SLOT) >>> 0;
+  const writeSequence = ((previousSequence + 1) | 1) >>> 0;
+  Atomics.store(view, WIIMOTE_STATE_SEQUENCE_SLOT, writeSequence | 0);
+  Atomics.store(view, 0, Number(state.buttons) | 0);
+  WIIMOTE_ANALOG_FIELDS.forEach((field, index) => {
+    Atomics.store(view, 1 + index, toFixedPoint(state[field]));
+  });
+  Atomics.store(view, 12, Number(state.sentAtEpochMs) | 0);
+  Atomics.store(view, 11, Number(state.inputGeneration) | 0);
+  Atomics.store(view, WIIMOTE_STATE_SEQUENCE_SLOT, (writeSequence + 1) | 0);
+}
+
+export function readWiimoteStateSnapshot(view, { maxAttempts = 3 } = {}) {
+  requireWiimoteStateView(view);
+  const attempts = Math.max(1, Math.trunc(Number(maxAttempts) || 1));
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const sequenceBefore = Atomics.load(view, WIIMOTE_STATE_SEQUENCE_SLOT) >>> 0;
+    if (sequenceBefore & 1) {
+      return { attempts: attempt, snapshot: null, status: "writer-active" };
+    }
+    const snapshot = { buttons: Atomics.load(view, 0) >>> 0 };
+    WIIMOTE_ANALOG_FIELDS.forEach((field, index) => {
+      snapshot[field] = Atomics.load(view, 1 + index) / WIIMOTE_FIXED_POINT_SCALE;
+    });
+    snapshot.inputGeneration = Atomics.load(view, 11) >>> 0;
+    snapshot.sentAtEpochMsLow = Atomics.load(view, 12) >>> 0;
+    const sequenceAfter = Atomics.load(view, WIIMOTE_STATE_SEQUENCE_SLOT) >>> 0;
+    if (sequenceBefore === sequenceAfter && !(sequenceAfter & 1)) {
+      return { attempts: attempt, snapshot, status: "ok" };
+    }
+  }
+  return { attempts, snapshot: null, status: "unstable" };
+}
+
+function toFixedPoint(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round(number * WIIMOTE_FIXED_POINT_SCALE) | 0;
+}
+
+function requireWiimoteStateView(view) {
+  if (!(view instanceof Int32Array) || view.length < WIIMOTE_STATE_SLOT_COUNT) {
+    throw new TypeError(`Wii Remote state transport requires ${WIIMOTE_STATE_SLOT_COUNT} Int32 slots`);
+  }
+}

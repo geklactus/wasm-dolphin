@@ -1,5 +1,12 @@
 import { lookupGameProfile, readGameId } from "./game-profiles.js";
 import { AudioController } from "./audio.js";
+import {
+  DEFAULT_WIIMOTE_MOUSE_BINDINGS,
+  cursorFromPointer,
+  readWiimoteFromGamepad,
+  resolveWiimoteKey,
+  wiimoteStateFromInputs
+} from "./wiimote.js";
 import { EmulatorHost } from "./core-host.js";
 import { startMainThreadProfiler } from "./main-profiler.js";
 import { createCausalTelemetry, deepMerge } from "./causal-telemetry.js";
@@ -132,6 +139,11 @@ let gamepadPressed = new Set();
 let gamepadInputState = null;
 let lastGamepadInput = null;
 let combinedPressed = new Set();
+// Wii Remote 1: what the keyboard, the mouse and a gamepad currently say (src/wiimote.js).
+const wiimoteKeys = new Set();
+const wiimoteMouseButtons = new Set();
+let wiimoteCursor = null;
+let wiimoteGamepad = null;
 let lastFrameInfo = null;
 let lastCausalTelemetry = null;
 let lastCausalTelemetryCapturedAt = -1;
@@ -250,6 +262,7 @@ wireScreenFit();
 wireFileMounting();
 wireTransport();
 wireKeyboard();
+wireWiimotePointer();
 wireTouchControls();
 wireGamepadPolling();
 
@@ -944,8 +957,15 @@ function wireKeyboard() {
       return;
     }
 
+    const wiimoteKey = resolveWiimoteKey(event.code);
+    if (wiimoteKey && !isTypingTarget(event.target)) {
+      wiimoteKeys.add(wiimoteKey);
+      syncWiimote();
+    }
+
     const button = resolveKeyboardButton(event.code);
     if (!button) {
+      if (wiimoteKey) event.preventDefault();
       return;
     }
 
@@ -957,8 +977,14 @@ function wireKeyboard() {
   });
 
   document.addEventListener("keyup", (event) => {
+    const wiimoteKey = resolveWiimoteKey(event.code);
+    if (wiimoteKey && wiimoteKeys.delete(wiimoteKey)) {
+      syncWiimote();
+    }
+
     const button = resolveKeyboardButton(event.code);
     if (!button) {
+      if (wiimoteKey) event.preventDefault();
       return;
     }
 
@@ -966,6 +992,59 @@ function wireKeyboard() {
     keyboardPressed.delete(button);
     syncInput("Keyboard");
   });
+}
+
+function isTypingTarget(target) {
+  const tag = target?.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || Boolean(target?.isContentEditable);
+}
+
+// The pointer over the game is Wii Remote 1's IR cursor; its buttons are A and B (and a
+// middle click shakes). Off the game the cursor is hidden, as a real remote pointed away
+// from the sensor bar. The context menu stays off the game so right click can be B.
+function wireWiimotePointer() {
+  const screen = elements.screen;
+  if (!screen) return;
+  const updateCursor = (event) => {
+    wiimoteCursor = cursorFromPointer(screen.getBoundingClientRect(), event.clientX, event.clientY);
+    syncWiimote();
+  };
+  screen.addEventListener("pointermove", updateCursor);
+  screen.addEventListener("pointerenter", updateCursor);
+  screen.addEventListener("pointerleave", () => {
+    wiimoteCursor = null;
+    syncWiimote();
+  });
+  screen.addEventListener("pointerdown", (event) => {
+    const name = DEFAULT_WIIMOTE_MOUSE_BINDINGS[event.button];
+    if (!name) return;
+    event.preventDefault();
+    wiimoteMouseButtons.add(name);
+    updateCursor(event);
+  });
+  const release = (event) => {
+    const name = DEFAULT_WIIMOTE_MOUSE_BINDINGS[event.button];
+    if (name && wiimoteMouseButtons.delete(name)) syncWiimote();
+  };
+  // Released anywhere: a drag that ends off the game must still let go of the button.
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  window.addEventListener("blur", () => {
+    if (wiimoteMouseButtons.size === 0 && wiimoteKeys.size === 0) return;
+    wiimoteMouseButtons.clear();
+    wiimoteKeys.clear();
+    syncWiimote();
+  });
+  screen.addEventListener("contextmenu", (event) => event.preventDefault());
+}
+
+function syncWiimote() {
+  host.setWiimoteState(wiimoteStateFromInputs({
+    keys: wiimoteKeys,
+    mouseButtons: wiimoteMouseButtons,
+    cursor: wiimoteCursor,
+    gamepad: wiimoteGamepad
+  }));
 }
 
 function wireTouchControls() {
@@ -1080,6 +1159,9 @@ function wireGamepadPolling() {
         }
       }
     }
+
+    wiimoteGamepad = firstPad ? readWiimoteFromGamepad(firstPad) : null;
+    syncWiimote();
 
     const nextGamepadInput = firstPad ? readGamepadInput(firstPad) : null;
     if (!legacyGamepadPoll && gamepadInputsEqual(lastGamepadInput, nextGamepadInput)) {

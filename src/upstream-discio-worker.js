@@ -61,7 +61,8 @@ import {
 } from "./input-visual-marker.js";
 import {
   compareInputGenerations,
-  readInputStateSnapshot
+  readInputStateSnapshot,
+  readWiimoteStateSnapshot
 } from "./input-transport.js";
 import {
   enableWgpuUploadWatermark,
@@ -447,6 +448,8 @@ let pacedPresentationStartedAt = 0;
 let presentationPacingMode = "smooth";
 let legacyTickQueue = false;
 let inputStateSabView = null;
+let wiimoteStateSabView = null;
+let lastWiimoteStateGeneration = 0;
 let lastInputStateGeneration = 0;
 // Detached OGL mode: worker owns a standalone OffscreenCanvas for the GL
 // backend (no transferControlToOffscreen, no compositor binding). After
@@ -891,6 +894,10 @@ async function handleMessage(type, payload) {
         inputStateSabView = new Int32Array(payload.inputStateSab);
         lastInputStateGeneration = 0;
       }
+      if (payload.wiimoteStateSab instanceof SharedArrayBuffer) {
+        wiimoteStateSabView = new Int32Array(payload.wiimoteStateSab);
+        lastWiimoteStateGeneration = 0;
+      }
       // SAB pixel transport: set up shared views once. The worker's
       // presentation loop will copy s_framebuffer bytes into oglPixelSabView
       // per OGL swap and bump oglMetaSabView[0] atomically — main thread
@@ -977,6 +984,9 @@ async function handleMessage(type, payload) {
     case "setInputMask":
       inputMask = payload.mask >>> 0;
       api?.setInputMask(inputMask);
+      return {};
+    case "setWiimoteState":
+      applyWiimoteStateSnapshot(payload, payload.inputSentAtEpochMs, "post");
       return {};
     case "setInputState":
       applyInputStateSnapshot({
@@ -2376,6 +2386,29 @@ function bindApi(module) {
     getVideoStats: optionalCwrap("GetVideoStats", "string", []),
     reset: cwrap("Reset", null, []),
     setInputMask: cwrap("SetInputMask", null, ["number"]),
+    setWiimoteState:
+      typeof module._SetWiimoteState === "function"
+        ? (state) =>
+            ccall(
+              "SetWiimoteState",
+              null,
+              ["number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number", "number"],
+              [
+                0,
+                state.buttons >>> 0,
+                Number(state.cursorX) || 0,
+                Number(state.cursorY) || 0,
+                Number(state.stickX) || 0,
+                Number(state.stickY) || 0,
+                Number(state.accelRight) || 0,
+                Number(state.accelForward) || 0,
+                Number(state.accelUp) || 0,
+                Number(state.gyroPitch) || 0,
+                Number(state.gyroRoll) || 0,
+                Number(state.gyroYaw) || 0
+              ]
+            )
+        : null,
     setInputState:
       typeof module._SetInputState === "function"
         ? (state) =>
@@ -3399,6 +3432,26 @@ function applyInputStateSnapshot(state, sentAtEpochMs, source) {
   return true;
 }
 
+// Wii Remote 1 (src/wiimote.js): the same generation ordering as the GC pad, no telemetry.
+function applyWiimoteStateSnapshot(state, sentAtEpochMs, source) {
+  if (!api?.setWiimoteState || !state) return false;
+  const generation = Number(state.inputGeneration) >>> 0;
+  if (!generation) return false;
+  if (compareInputGenerations(generation, lastWiimoteStateGeneration) <= 0) return false;
+  lastWiimoteStateGeneration = generation;
+  api.setWiimoteState(state);
+  return true;
+}
+
+function pollWiimoteStateFromSab() {
+  if (!wiimoteStateSabView || !api?.setWiimoteState) {
+    return;
+  }
+  const result = readWiimoteStateSnapshot(wiimoteStateSabView);
+  if (!result.snapshot) return;
+  applyWiimoteStateSnapshot(result.snapshot, result.snapshot.sentAtEpochMsLow, "sab");
+}
+
 function pollInputStateFromSab() {
   if (!inputStateSabView || !api?.setInputState) {
     return;
@@ -3418,6 +3471,7 @@ function runPresentationLoop() {
     loopsSincePresentationFps += 1;
     if (moduleInstance && api) {
       pollInputStateFromSab();
+      pollWiimoteStateFromSab();
       // Day-27: drain the cross-thread WebGPU command ring and replay
       // on renderGpu.device. No-op until the video pthread hands the
       // ring over (handleWebGpuCmdRing) and only matters for
