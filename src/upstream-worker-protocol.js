@@ -1,5 +1,5 @@
 export const DEFAULT_UPSTREAM_CORE_URL = "./cores/dolphin/dolphin-core-upstream.js";
-export const DEFAULT_UPSTREAM_CORE_SHA256 = "e54b52d3b8b517d8418682fb59572e120e25ffaf8e111b8908080bd62ddbbafb";
+export const DEFAULT_UPSTREAM_CORE_SHA256 = "b7c5c6feeef8593f5766e0a08771ba14ad461aca086c8b5b2e6b943b0601faa1";
 export const DISCIO_UPSTREAM_CORE_URL = "./cores/dolphin/dolphin-upstream.js";
 export const WORKERFS_MOUNT_DIR = "/workerfs";
 export const XFB_FAST_PATH_FLAGS = Object.freeze({
