@@ -1,5 +1,5 @@
 export const DEFAULT_UPSTREAM_CORE_URL = "./cores/dolphin/dolphin-core-upstream.js";
-export const DEFAULT_UPSTREAM_CORE_SHA256 = "3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c";
+export const DEFAULT_UPSTREAM_CORE_SHA256 = "e54b52d3b8b517d8418682fb59572e120e25ffaf8e111b8908080bd62ddbbafb";
 export const DISCIO_UPSTREAM_CORE_URL = "./cores/dolphin/dolphin-upstream.js";
 export const WORKERFS_MOUNT_DIR = "/workerfs";
 export const XFB_FAST_PATH_FLAGS = Object.freeze({
@@ -39,6 +39,36 @@ export function requestedXfbFastPaths(search = globalThis.location?.search ?? ""
     return XFB_FAST_PATH_FLAGS.both;
   }
   return 0;
+}
+
+// ?swthreads= selects how many worker threads rasterize alongside the GPU thread on the
+// software renderer. "auto" (the default) lets the worker size it from the machine's core
+// count; "0" is the upstream single-threaded rasterizer; 1-8 is an explicit count.
+export const SOFTWARE_RASTER_THREADS_MAX = 8;
+
+export function requestedSoftwareRasterThreads(search = globalThis.location?.search ?? "") {
+  const raw = (new URLSearchParams(search).get("swthreads") || "").trim().toLowerCase();
+  if (raw === "" || raw === "auto") return "auto";
+  if (raw === "off" || raw === "none") return 0;
+  const count = Number.parseInt(raw, 10);
+  if (!Number.isFinite(count)) return "auto";
+  return Math.max(0, Math.min(SOFTWARE_RASTER_THREADS_MAX, count));
+}
+
+// Resolves the requested setting to a worker count for one boot. The CPU thread and the GPU
+// thread each want a core of their own and the browser needs one, so the automatic choice
+// leaves those alone: half the logical cores minus two, capped at four. Only the software
+// renderer has a rasterizer to split.
+export function resolveSoftwareRasterThreads(requested, { videoBackend = "Software Renderer",
+  hardwareConcurrency = globalThis.navigator?.hardwareConcurrency } = {}) {
+  if (videoBackend !== "Software Renderer") return 0;
+  if (requested === "auto" || requested === undefined || requested === null) {
+    const cores = Number(hardwareConcurrency) || 0;
+    return Math.max(0, Math.min(4, Math.floor(cores / 2) - 2));
+  }
+  const count = Number(requested);
+  if (!Number.isFinite(count)) return 0;
+  return Math.max(0, Math.min(SOFTWARE_RASTER_THREADS_MAX, Math.trunc(count)));
 }
 
 export function requestedSoftwareTevHotCaseMode(search = globalThis.location?.search ?? "") {

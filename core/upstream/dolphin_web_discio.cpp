@@ -38,8 +38,14 @@
 
 #ifdef __EMSCRIPTEN__
 extern "C" int DolphinWeb_FastSoftwareRaster();
+extern "C" int DolphinWeb_SoftwareRasterThreadsActive();
 #else
 static int DolphinWeb_FastSoftwareRaster()
+{
+  return 0;
+}
+
+static int DolphinWeb_SoftwareRasterThreadsActive()
 {
   return 0;
 }
@@ -339,7 +345,8 @@ std::string PadDebugStats()
       << " buttons:" << std::hex << poll.button_mask << std::dec
       << " stick:" << static_cast<int>(poll.stick_x) << ","
       << static_cast<int>(poll.stick_y)
-      << " fastsw:" << DolphinWeb_FastSoftwareRaster();
+      << " fastsw:" << DolphinWeb_FastSoftwareRaster()
+      << " swthreads:" << DolphinWeb_SoftwareRasterThreadsActive();
   return out.str();
 }
 

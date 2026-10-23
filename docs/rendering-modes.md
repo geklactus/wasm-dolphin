@@ -33,6 +33,12 @@ software rasterization stage and are useful fallbacks or diagnostics.
 `fastsw=3` use more aggressive raster/encode approximations; they can raise
 distinct-frame cadence but are not guaranteed to raise game speed.
 
+`swthreads=auto` (default) rasterizes each draw batch across worker threads by
+horizontal EFB bands; `swthreads=0` is the single-threaded upstream rasterizer
+and `swthreads=N` forces `N` workers (1-8). The image is identical in every
+mode; only the time per frame changes. See
+[software raster threads](software-raster-threads.md).
+
 ## Hardware and diagnostic paths
 
 `video=wgpu` routes Dolphin draw work through the experimental WebGPU hardware
@@ -58,7 +64,7 @@ choice standing:
 | `wgpuzcomploc=0` | 1 | on | report no early-Z, so VideoCommon's zcomploc hack runs instead of a `FORCE_EARLY_Z` the WGSL translation drops |
 | `wgpulogicop=0` | 2 | on | report no logic ops, so VideoCommon approximates them (with shader help) rather than the producer |
 | `wgpureadback=1` | 3 | off | GPU → heap readback: EFB copies to RAM, EFB peeks and the bounding box return real values; a stall per copy |
-| `wgpudepthlegacy=1` | 4 | off | the depth convention of the cores before vendor patch 0075: fog, z-texture depth and EFB depth copies inverted, clear depth hard-coded; for an A/B only |
+| `wgpudepthlegacy=1` | 4 | off | the depth convention of the cores before vendor patch 0076: fog, z-texture depth and EFB depth copies inverted, clear depth hard-coded; for an A/B only |
 
 `video=ogl` is an OGL/WebGL2-style diagnostic backend. Its JIT safety behavior
 is intentionally more conservative; see [JIT flags](jit-flags.md).

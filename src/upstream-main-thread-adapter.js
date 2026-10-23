@@ -4,6 +4,7 @@ import {
   DEFAULT_UPSTREAM_CORE_SHA256,
   DEFAULT_UPSTREAM_CORE_URL,
   WORKERFS_MOUNT_DIR,
+  resolveSoftwareRasterThreads,
   sanitizeDiscFileName,
   verifyUpstreamCoreWasm
 } from "./upstream-worker-protocol.js";
@@ -29,6 +30,7 @@ export class UpstreamMainThreadAdapter {
     presentationScale = 1,
     oglTestClear = false,
     fastSoftwareRaster = 0,
+    softwareRasterThreads = "auto",
     xfbFastPaths = 0,
     gameProfile = null,
     rendererFeatureOverrides = {}
@@ -50,6 +52,7 @@ export class UpstreamMainThreadAdapter {
     this.presentationScale = presentationScale;
     this.oglTestClear = Boolean(oglTestClear);
     this.fastSoftwareRaster = Math.min(3, Math.max(0, Number(fastSoftwareRaster) || 0));
+    this.softwareRasterThreads = resolveSoftwareRasterThreads(softwareRasterThreads, { videoBackend });
     this.xfbFastPaths = (Number(xfbFastPaths) || 0) & 3;
     this.gameProfile = gameProfile ?? null;
     this.rendererFeatureOverrides = { ...(rendererFeatureOverrides ?? {}) };
@@ -115,6 +118,7 @@ export class UpstreamMainThreadAdapter {
       dolphinOglWorkerWebGl: this.videoBackend === "OGL",
       dolphinOglTestClear: this.oglTestClear,
       dolphinFastSoftwareRaster: this.fastSoftwareRaster,
+      dolphinSoftwareRasterThreads: this.softwareRasterThreads,
       dolphinXfbFastPaths: this.xfbFastPaths,
       locateFile: (path) => new URL(path, coreUrl).href,
       print: (message) => this.onStatus(String(message)),

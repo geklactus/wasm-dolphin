@@ -9,8 +9,10 @@ import {
   isStrictOneWayWorkerRequest,
   planWorkerSuccessReply,
   requestedLegacyOneWayAck,
+  requestedSoftwareRasterThreads,
   requestedSoftwareTevHotCaseMode,
   requestedXfbFastPaths,
+  resolveSoftwareRasterThreads,
   requestedUpstreamCoreBuild,
   sanitizeDiscFileName,
   sha256Hex,
@@ -116,4 +118,45 @@ test("worker error replies are never suppressible", () => {
     ok: false,
     error: "input failed"
   });
+});
+
+test("swthreads reads auto, off, and bounded explicit worker counts", () => {
+  assert.equal(requestedSoftwareRasterThreads(""), "auto");
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=auto"), "auto");
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=0"), 0);
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=off"), 0);
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=3"), 3);
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=99"), 8);
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=-2"), 0);
+  assert.equal(requestedSoftwareRasterThreads("?swthreads=many"), "auto");
+});
+
+test("auto raster threads leave the CPU thread, GPU thread and browser their cores", () => {
+  const resolve = (cores, requested = "auto") =>
+    resolveSoftwareRasterThreads(requested, { hardwareConcurrency: cores });
+  assert.equal(resolve(0), 0);
+  assert.equal(resolve(2), 0);
+  assert.equal(resolve(4), 0);
+  assert.equal(resolve(6), 1);
+  assert.equal(resolve(8), 2);
+  assert.equal(resolve(10), 3);
+  assert.equal(resolve(12), 4);
+  assert.equal(resolve(16), 4);
+  assert.equal(resolve(undefined), 0);
+  // Explicit counts are honoured up to the core's cap, whatever the machine reports.
+  assert.equal(resolve(4, 3), 3);
+  assert.equal(resolve(16, 0), 0);
+  assert.equal(resolve(16, 8), 8);
+  assert.equal(resolve(16, 12), 8);
+  assert.equal(resolve(16, "2"), 2);
+  assert.equal(resolve(16, "junk"), 0);
+  // Only the software renderer has a rasterizer to split.
+  assert.equal(
+    resolveSoftwareRasterThreads("auto", { videoBackend: "WebGPU-Real", hardwareConcurrency: 16 }),
+    0
+  );
+  assert.equal(
+    resolveSoftwareRasterThreads(4, { videoBackend: "OGL", hardwareConcurrency: 16 }),
+    0
+  );
 });

@@ -112,6 +112,7 @@ const elements = {
   settingCore: document.querySelector("#settingCore"),
   settingCpu: document.querySelector("#settingCpu"),
   settingFastSw: document.querySelector("#settingFastSw"),
+  settingSwThreads: document.querySelector("#settingSwThreads"),
   settingForceJit: document.querySelector("#settingForceJit"),
   settingJitTier: document.querySelector("#settingJitTier"),
   settingOglProxy: document.querySelector("#settingOglProxy"),
@@ -503,6 +504,7 @@ function populateSettingsForm(settings) {
   elements.settingOglProxy.value = settings.oglproxy;
   elements.settingQueue.value = settings.queue;
   elements.settingFastSw.value = settings.fastsw;
+  elements.settingSwThreads.value = settings.swthreads;
   elements.settingJitTier.value = settings.jittier;
   elements.settingWasmJit.checked = settings.wasmjit === "1";
   elements.settingForceJit.checked = settings.forcejit === "1";
@@ -521,6 +523,7 @@ function collectSettingsForm() {
     oglproxy: elements.settingOglProxy.value,
     queue: elements.settingQueue.value,
     fastsw: elements.settingFastSw.value,
+    swthreads: elements.settingSwThreads.value,
     wasmjit: elements.settingWasmJit.checked ? "1" : "0",
     jittier: elements.settingJitTier.value,
     forcejit: elements.settingForceJit.checked ? "1" : "0",

@@ -5,6 +5,7 @@ import {
   buildWorkerErrorReply,
   isStrictOneWayWorkerRequest,
   planWorkerSuccessReply,
+  resolveSoftwareRasterThreads,
   sanitizeDiscFileName,
   sha256Hex
 } from "./upstream-worker-protocol.js";
@@ -941,6 +942,7 @@ async function handleMessage(type, payload) {
         oglProxyMode: payload.oglProxyMode,
         oglTestClear: payload.oglTestClear,
         fastSoftwareRaster: payload.fastSoftwareRaster,
+        softwareRasterThreads: payload.softwareRasterThreads,
         softwareTevHotCaseMode: payload.softwareTevHotCaseMode,
         xfbFastPaths: payload.xfbFastPaths,
         correctTimeDrift: payload.correctTimeDrift,
@@ -1471,6 +1473,7 @@ async function loadCore({
   oglProxyMode = "proxy",
   oglTestClear = false,
   fastSoftwareRaster = 0,
+  softwareRasterThreads: requestedSoftwareRasterThreads = "auto",
   softwareTevHotCaseMode: requestedSoftwareTevHotCaseMode = 0,
   xfbFastPaths = 0,
   correctTimeDrift = false,
@@ -1750,6 +1753,20 @@ async function loadCore({
   webGpuCausalStats.mappedDrainCoalescingEnabled = wgpuMappedDrainCoalescingEnabled;
   rendererDiagnostics.requestedVideoBackend = videoBackend;
   softwareTevHotCaseMode = (Number(requestedSoftwareTevHotCaseMode) || 0) & 3;
+  const softwareRasterThreads = resolveSoftwareRasterThreads(requestedSoftwareRasterThreads, {
+    videoBackend
+  });
+  rendererDiagnostics.softwareRasterThreads = {
+    requested: requestedSoftwareRasterThreads,
+    resolved: softwareRasterThreads,
+    hardwareConcurrency: Number(globalThis.navigator?.hardwareConcurrency) || 0
+  };
+  if (videoBackend === "Software Renderer") {
+    postStatus(
+      `Software rasterizer threads: ${softwareRasterThreads} worker(s) + GPU thread ` +
+      `(requested ${requestedSoftwareRasterThreads}, ${rendererDiagnostics.softwareRasterThreads.hardwareConcurrency} logical cores)`
+    );
+  }
   rendererDiagnostics.requestedPresenterBackend = normalizePresenterBackend(presenterBackend);
   oglSabEnabledForLoad = Boolean(oglSabEnabled);
 
@@ -1936,6 +1953,9 @@ async function loadCore({
     dolphinOglReadbackPresent: readbackOgl,
     dolphinOglTestClear: Boolean(oglTestClear),
     dolphinFastSoftwareRaster: Math.min(3, Math.max(0, Number(fastSoftwareRaster) || 0)),
+    // Software rasterizer worker threads (Rasterizer::Init starts them at boot; the count is
+    // fixed for the run). Resolved here so the decision sees this worker's hardwareConcurrency.
+    dolphinSoftwareRasterThreads: softwareRasterThreads,
     dolphinXfbFastPaths: (Number(xfbFastPaths) || 0) & 3,
     // Read by dolphin_web_core.cpp at CoreInit. Both are opt-in and default
     // false, so the shipping page load is unchanged.
@@ -11675,7 +11695,7 @@ function drainWebGpuCmdRing(source = "presentation") {
           // rendered 3D EFB right before the XFB copy, leaving only the 2D
           // overlay on black (issue #8).
           //
-          // Cores from vendor patch 0075 on also set bit 3 and carry the depth
+          // Cores from vendor patch 0076 on also set bit 3 and carry the depth
           // clear value in bits 8..31 (src/wgpu-depth-clear.js); older cores
           // leave those zero and get the hard-coded far clear below.
           const clearMask = u32[recWord + 6];
@@ -11706,7 +11726,7 @@ function drainWebGpuCmdRing(source = "presentation") {
           // depth compare is inverted (REVZ_COMPARE_FLIP). That far value was
           // hard-coded for every pass until the producer started sending the
           // game's actual clear depth in the window convention (vendor patch
-          // 0075); a core that sends none still gets the hard-coded far. One
+          // 0076); a core that sends none still gets the hard-coded far. One
           // value per pass is all WebGPU allows: depthClearValue is fixed at
           // beginRenderPass.
           const dcv = beginPassDepthClear(clearMask, GX_NATIVE_DEPTH ? 1.0 : 0.0);
@@ -12266,7 +12286,7 @@ function drainWebGpuCmdRing(source = "presentation") {
           const ch = Math.max(1, Math.min(u32[recWord + 4], passH - cy));
           const crgba = u32[recWord + 5] >>> 0;
           const cflags = u32[recWord + 7] >>> 0;
-          // Cores from vendor patch 0075 on send the clear depth in this
+          // Cores from vendor patch 0076 on send the clear depth in this
           // backend's window convention (reverse-Z: the console's far is 0.0)
           // and set flag 16. Older cores sent the raw console value (~1.0),
           // which under reverse-Z is the NEAREST plane and rejected every later

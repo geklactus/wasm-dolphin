@@ -154,7 +154,7 @@ cause is in how depth values left the core, not in the consumer's geometry:
   swapped the two and drew those passes inside out, or black against the
   hard-coded clear.
 
-Vendor patch `0075-webgpu-depth-convention`:
+Vendor patch `0076-webgpu-depth-convention`:
 
 - removes the §28at gating, so VideoCommon's `1 - x` conversions apply to this
   backend as to any other without reversed depth ranges;

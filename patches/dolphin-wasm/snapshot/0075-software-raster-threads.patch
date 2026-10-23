@@ -1,0 +1,1186 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Fri, 23 Oct 2026 11:33:11 +0000
+Subject: [PATCH] 0075-software-raster-threads
+
+Band-parallel software rasterizer. SWVertexLoader::DrawCurrentBatch brackets
+each draw batch with Rasterizer::BeginBatch/EndBatch; triangles (and the
+clipper's z-slope-only updates for culled triangles) are queued, and at
+EndBatch a batch whose bounding boxes cover enough of the EFB is rasterized by
+the GPU thread plus N worker threads, each claiming 24-row horizontal bands
+from a shared counter and drawing every queued triangle's rows inside its band
+in queue order. Small batches, and everything when no workers were requested,
+are drawn inline in upstream order.
+
+The output is byte-identical to the single-threaded rasterizer: BP/XF state is
+constant within a batch (every register write flushes first), each pixel's
+work touches only its own EFB pixel apart from the fastsw post-pass whose 4x4
+cell never crosses a 4-row-aligned band edge, triangles stay ordered within a
+band, and the zfreeze slope is updated by every triangle before the band is
+applied, with the GPU thread's slope restored to the last queued triangle's
+at the end of a job.
+
+Tev accumulates its statistics and bounding-box extents per batch and
+EfbInterface counts perf-query quads thread-locally; the rasterizer merges
+both under one lock. Core.cpp reads the requested count from
+Module.dolphinSoftwareRasterThreads (the host's ?swthreads=), publishes the
+started count for GetVideoStats, and exposes a setter plus started-worker and
+worker-band counters for the core's parity smoke.
+
+diff --git a/Source/Core/Core/Core.cpp b/Source/Core/Core/Core.cpp
+index 4a25ae85f7..1ebbfe59cf 100644
+--- a/Source/Core/Core/Core.cpp
++++ b/Source/Core/Core/Core.cpp
+@@ -195,6 +195,8 @@ static std::atomic<bool> s_worker_owned_webgl = false;
+ static std::atomic<bool> s_diagnostic_ogl_clear = false;
+ static std::atomic<bool> s_ogl_readback_present = false;
+ static std::atomic<int> s_fast_software_raster = 0;
++static std::atomic<int> s_software_raster_threads = 0;
++static std::atomic<int> s_software_raster_threads_active = 0;
+ 
+ extern "C" int DolphinWeb_UseWorkerOwnedWebGL()
+ {
+@@ -221,6 +223,28 @@ extern "C" void DolphinWeb_SetFastSoftwareRaster(int mode)
+   s_fast_software_raster.store(std::max(0, std::min(3, mode)), std::memory_order_relaxed);
+ }
+ 
++// Software rasterizer worker threads requested by the page (Module.dolphinSoftwareRasterThreads,
++// read once at Core::Init) and the count Rasterizer::Init actually started.
++extern "C" int DolphinWeb_SoftwareRasterThreads()
++{
++  return s_software_raster_threads.load(std::memory_order_relaxed);
++}
++
++extern "C" void DolphinWeb_SetSoftwareRasterThreads(int count)
++{
++  s_software_raster_threads.store(std::max(0, std::min(8, count)), std::memory_order_relaxed);
++}
++
++extern "C" void DolphinWeb_SetSoftwareRasterThreadsActive(int count)
++{
++  s_software_raster_threads_active.store(count, std::memory_order_relaxed);
++}
++
++extern "C" int DolphinWeb_SoftwareRasterThreadsActive()
++{
++  return s_software_raster_threads_active.load(std::memory_order_relaxed);
++}
++
+ bool ReadWorkerOwnedWebGLRequest()
+ {
+   return EM_ASM_INT({
+@@ -250,6 +274,14 @@ int ReadFastSoftwareRasterRequest()
+   });
+ }
+ 
++int ReadSoftwareRasterThreadsRequest()
++{
++  return EM_ASM_INT({
++    const value = Module && Module['dolphinSoftwareRasterThreads'];
++    return Number.isFinite(value) ? Math.max(0, Math.min(8, value | 0)) : 0;
++  });
++}
++
+ bool UseWorkerOwnedWebGL()
+ {
+   return s_worker_owned_webgl.load(std::memory_order_relaxed);
+@@ -275,6 +307,11 @@ void SetFastSoftwareRaster(int mode)
+   s_fast_software_raster.store(mode, std::memory_order_relaxed);
+ }
+ 
++void SetSoftwareRasterThreads(int count)
++{
++  s_software_raster_threads.store(count, std::memory_order_relaxed);
++}
++
+ void RegisterModuleCanvasForPthreadTransfer()
+ {
+   EM_ASM({
+@@ -335,6 +372,11 @@ void SetFastSoftwareRaster(int mode)
+   (void)mode;
+ }
+ 
++void SetSoftwareRasterThreads(int count)
++{
++  (void)count;
++}
++
+ bool ReadDiagnosticOglClearRequest()
+ {
+   return false;
+@@ -350,6 +392,11 @@ int ReadFastSoftwareRasterRequest()
+   return 0;
+ }
+ 
++int ReadSoftwareRasterThreadsRequest()
++{
++  return 0;
++}
++
+ void RegisterModuleCanvasForPthreadTransfer()
+ {
+ }
+@@ -493,10 +540,12 @@ bool Init(Core::System& system, std::unique_ptr<BootParameters> boot, const Wind
+   const bool diagnostic_ogl_clear = ReadDiagnosticOglClearRequest();
+   const bool ogl_readback_present = ReadOglReadbackPresentRequest();
+   const int fast_software_raster = ReadFastSoftwareRasterRequest();
++  const int software_raster_threads = ReadSoftwareRasterThreadsRequest();
+   SetWorkerOwnedWebGL(worker_owned_webgl);
+   SetDiagnosticOglClear(diagnostic_ogl_clear);
+   SetOglReadbackPresent(ogl_readback_present);
+   SetFastSoftwareRaster(fast_software_raster);
++  SetSoftwareRasterThreads(software_raster_threads);
+ 
+   if (s_emu_thread.joinable())
+   {
+diff --git a/Source/Core/VideoBackends/Software/Rasterizer.cpp b/Source/Core/VideoBackends/Software/Rasterizer.cpp
+index 919d2ddc82..2dc7823c14 100644
+--- a/Source/Core/VideoBackends/Software/Rasterizer.cpp
++++ b/Source/Core/VideoBackends/Software/Rasterizer.cpp
+@@ -4,13 +4,21 @@
+ #include "VideoBackends/Software/Rasterizer.h"
+ 
+ #include <algorithm>
++#include <array>
++#include <atomic>
++#include <chrono>
++#include <climits>
++#include <cstdio>
+ #include <cstring>
++#include <thread>
+ #include <vector>
+ 
+ #include "Common/Assert.h"
+ #include "Common/CommonTypes.h"
++#include "Common/Thread.h"
+ 
+ #include "VideoBackends/Software/NativeVertexFormat.h"
++#include "VideoBackends/Software/SWBoundingBox.h"
+ #include "VideoBackends/Software/SWEfbInterface.h"
+ #include "VideoBackends/Software/Tev.h"
+ #include "VideoCommon/BPFunctions.h"
+@@ -21,6 +29,8 @@
+ #include "VideoCommon/XFMemory.h"
+ 
+ #ifdef __EMSCRIPTEN__
++#include <emscripten/threading.h>
++
+ #include "dolphin_web_raster_profile.h"
+ #endif
+ 
+@@ -28,19 +38,51 @@ namespace Rasterizer
+ {
+ #ifdef __EMSCRIPTEN__
+ extern "C" int DolphinWeb_FastSoftwareRaster();
++extern "C" int DolphinWeb_SoftwareRasterThreads();
++extern "C" void DolphinWeb_SetSoftwareRasterThreadsActive(int count);
+ #else
+ static int DolphinWeb_FastSoftwareRaster()
+ {
+   return 0;
+ }
++
++static int DolphinWeb_SoftwareRasterThreads()
++{
++  return 0;
++}
++
++static void DolphinWeb_SetSoftwareRasterThreadsActive(int)
++{
++}
+ #endif
+ 
+ static constexpr int BLOCK_SIZE = 2;
+ 
++// The vertex fields the pixel loop reads. Triangles are queued for the duration of a batch
++// (see EndBatch) and the clipper reuses its vertex storage, so every queued triangle owns a
++// copy of what it needs.
++struct RasterVertex
++{
++  Common::Vec3 screenPosition;
++  float w;  // projectedPosition.w
++  std::array<std::array<u8, 4>, 2> color;
++  std::array<Common::Vec3, 8> texCoords;
++
++  static RasterVertex From(const OutputVertexData* v)
++  {
++    RasterVertex out;
++    out.screenPosition = v->screenPosition;
++    out.w = v->projectedPosition.w;
++    out.color = v->color;
++    out.texCoords = v->texCoords;
++    return out;
++  }
++};
++
+ struct SlopeContext
+ {
+-  SlopeContext(const OutputVertexData* v0, const OutputVertexData* v1, const OutputVertexData* v2,
+-               s32 x0_, s32 y0_, s32 x_off, s32 y_off)
++  SlopeContext(const RasterVertex* v0, const RasterVertex* v1, const RasterVertex* v2, s32 x0_,
++               s32 y0_, s32 x_off, s32 y_off)
+       : x0(x0_), y0(y0_)
+   {
+     // adjust a little less than 0.5
+@@ -108,22 +150,96 @@ struct Slope
+   }
+ };
+ 
+-static Slope ZSlope;
+-static Slope WSlope;
+-static Slope ColorSlopes[2][4];
+-static Slope TexSlopes[8][3];
++// Everything the pixel loop mutates. There is one per thread: the GPU thread's instance is the
++// master (it carries the zfreeze slope across batches and the per-batch TEV constants), the
++// worker threads get copies of the batch-constant parts at the start of every job they join.
++struct RasterContext
++{
++  Slope ZSlope;
++  Slope WSlope;
++  Slope ColorSlopes[2][4];
++  Slope TexSlopes[8][3];
++
++  Tev tev;
++  RasterBlock rasterBlock;
++
++  // g_stats delta, merged under the merge lock (see MergeContextStats).
++  u32 rasterized_pixels = 0;
++  // Job generation this context last copied the batch constants for (see WorkerMain).
++  u32 prepared_generation = 0xFFFFFFFFu;
++};
+ 
+-static Tev tev;
+-static RasterBlock rasterBlock;
++static RasterContext& LocalContext()
++{
++  static thread_local RasterContext context;
++  return context;
++}
++
++// One queued rasterizer command. The clipper also asks for z-slope-only updates (culled
++// triangles still feed zfreeze), so those are queued too, keeping the slope history exact.
++struct RasterOp
++{
++  RasterVertex v[3];
++  // EFB rows a triangle can touch, over the union of the scissor rectangles. Empty
++  // (miny >= maxy) for z-slope-only ops and for triangles the scissor rejects outright.
++  s16 miny = 0;
++  s16 maxy = 0;
++  bool zslope_only = false;
++  // Scissor offsets of a z-slope-only op (a triangle op uses each scissor rectangle's own).
++  s32 x_off = 0;
++  s32 y_off = 0;
++};
+ 
+ static std::vector<BPFunctions::ScissorRect> scissors;
+ 
+-void Init()
++// GPU-thread batch state.
++static std::vector<RasterOp> s_ops;
++static u64 s_queued_area = 0;
++static bool s_batch_active = false;
++
++namespace
+ {
+-  // The other slopes are set each for each primitive drawn, but zfreeze means that the z slope
+-  // needs to be set to an (untested) default value.
+-  ZSlope = Slope();
+-}
++// Bands must be a multiple of 4 rows: the fastsw post-pass fills 4x4 cells from their top-left
++// pixel and the 2x2 raster blocks never straddle a band, so every EFB row is written by exactly
++// one thread per job.
++constexpr u32 BAND_HEIGHT = 24;
++constexpr u32 BAND_COUNT = (EFB_HEIGHT + BAND_HEIGHT - 1) / BAND_HEIGHT;
++static_assert(BAND_HEIGHT % 4 == 0);
++static_assert(BAND_COUNT < 256, "the band index shares a 32-bit word with the job generation");
++constexpr u32 MAX_WORKERS = 8;
++// Queue bound; a batch longer than this is rasterized in several jobs, still in order.
++constexpr std::size_t QUEUE_FLUSH_OPS = 8192;
++// Below this many bounding-box EFB pixels a job is cheaper to rasterize inline than to hand out.
++constexpr u64 PARALLEL_MIN_AREA = 4096;
++// How long an idle worker spins for the next job before parking on the futex. Batches arrive
++// every few hundred microseconds while a frame is being drawn.
++constexpr auto WORKER_SPIN = std::chrono::microseconds(150);
++constexpr u32 GENERATION_UNPREPARED = 0xFFFFFFFFu;
++
++struct WorkerPool
++{
++  std::vector<std::thread> threads;
++  // (job generation << 8) | next unclaimed band. Claiming a band and learning which job it
++  // belongs to is a single compare-exchange, so a worker can never apply one job's state to
++  // another job's band.
++  std::atomic<u32> state{BAND_COUNT};
++  std::atomic<u32> bands_done{0};
++  std::atomic<u32> sleepers{0};
++  std::atomic<u32> started{0};
++  std::atomic<u64> worker_bands{0};
++  std::atomic<bool> quit{false};
++
++  // The current job. Written by the GPU thread before it publishes the generation in `state`;
++  // immutable until bands_done reaches BAND_COUNT.
++  const RasterOp* ops = nullptr;
++  std::size_t op_count = 0;
++  Slope initial_zslope;
++  const Tev* master_tev = nullptr;
++};
++
++WorkerPool s_pool;
++std::atomic_flag s_merge_lock = ATOMIC_FLAG_INIT;
++}  // namespace
+ 
+ void ScissorChanged()
+ {
+@@ -156,15 +272,30 @@ static inline int iround(float x)
+ 
+ void SetTevKonstColors()
+ {
+-  tev.SetKonstColors();
++  LocalContext().tev.SetKonstColors();
+ }
+ 
+ void ClassifyTevHotCase()
+ {
+-  tev.ClassifyHotCaseDraw();
++  LocalContext().tev.ClassifyHotCaseDraw();
++}
++
++int ActiveWorkerThreads()
++{
++  return static_cast<int>(s_pool.threads.size());
++}
++
++int StartedWorkerThreads()
++{
++  return static_cast<int>(s_pool.started.load(std::memory_order_acquire));
++}
++
++u64 WorkerBandsProcessed()
++{
++  return s_pool.worker_bands.load(std::memory_order_acquire);
+ }
+ 
+-static void Draw(s32 x, s32 y, s32 xi, s32 yi)
++static void Draw(RasterContext& ctx, s32 x, s32 y, s32 xi, s32 yi)
+ {
+   static const int fast_software_raster = DolphinWeb_FastSoftwareRaster();
+   // fastsw skips 3 of every 4 pixels (level 1) or 15 of every 16 (level 2)
+@@ -181,9 +312,9 @@ static void Draw(s32 x, s32 y, s32 xi, s32 yi)
+   DolphinWeb::RasterProfile::RecordRasterCandidatePixel();
+ #endif
+ 
+-  INCSTAT(g_stats.this_frame.rasterized_pixels);
++  ++ctx.rasterized_pixels;
+ 
+-  s32 z = (s32)std::clamp<float>(ZSlope.GetValue(x, y), 0.0f, 16777215.0f);
++  s32 z = (s32)std::clamp<float>(ctx.ZSlope.GetValue(x, y), 0.0f, 16777215.0f);
+ 
+   if (bpmem.GetEmulatedZ() == EmulatedZ::Early)
+   {
+@@ -198,7 +329,8 @@ static void Draw(s32 x, s32 y, s32 xi, s32 yi)
+     EfbInterface::IncPerfCounterQuadCount(PQ_ZCOMP_OUTPUT_ZCOMPLOC);
+   }
+ 
+-  RasterBlockPixel& pixel = rasterBlock.Pixel[xi][yi];
++  RasterBlockPixel& pixel = ctx.rasterBlock.Pixel[xi][yi];
++  Tev& tev = ctx.tev;
+ 
+   tev.Position[0] = x;
+   tev.Position[1] = y;
+@@ -209,7 +341,7 @@ static void Draw(s32 x, s32 y, s32 xi, s32 yi)
+   {
+     for (int comp = 0; comp < 4; comp++)
+     {
+-      const float color = ColorSlopes[i][comp].GetValue(x, y);
++      const float color = ctx.ColorSlopes[i][comp].GetValue(x, y);
+       tev.Color[i][comp] = (u8)std::clamp<float>(color, 0.0f, 255.0f);
+     }
+   }
+@@ -224,14 +356,14 @@ static void Draw(s32 x, s32 y, s32 xi, s32 yi)
+ 
+   for (unsigned int i = 0; i < bpmem.genMode.numindstages; i++)
+   {
+-    tev.IndirectLod[i] = rasterBlock.IndirectLod[i];
+-    tev.IndirectLinear[i] = rasterBlock.IndirectLinear[i];
++    tev.IndirectLod[i] = ctx.rasterBlock.IndirectLod[i];
++    tev.IndirectLinear[i] = ctx.rasterBlock.IndirectLinear[i];
+   }
+ 
+   for (unsigned int i = 0; i <= bpmem.genMode.numtevstages; i++)
+   {
+-    tev.TextureLod[i] = rasterBlock.TextureLod[i];
+-    tev.TextureLinear[i] = rasterBlock.TextureLinear[i];
++    tev.TextureLod[i] = ctx.rasterBlock.TextureLod[i];
++    tev.TextureLinear[i] = ctx.rasterBlock.TextureLinear[i];
+   }
+ 
+   tev.Draw();
+@@ -253,6 +385,9 @@ static void Draw(s32 x, s32 y, s32 xi, s32 yi)
+   // triangles), which is acceptable given level 2 is an aggressive
+   // low-quality mode.
+   //
++  // With worker threads every band boundary is a multiple of 4 rows, so the
++  // cell this fills always lies inside the band that is drawing (x, y).
++  //
+   // Gated on color_update because if BlendTev didn't write at (x, y) we'd
+   // be propagating stale data — harmless but wasteful. Depth isn't
+   // propagated: the skipped cells won't be re-rasterized this frame, so
+@@ -285,7 +420,8 @@ static void Draw(s32 x, s32 y, s32 xi, s32 yi)
+   }
+ }
+ 
+-static inline void CalculateLOD(s32* lodp, bool* linear, u32 texmap, u32 texcoord)
++static inline void CalculateLOD(const RasterContext& ctx, s32* lodp, bool* linear, u32 texmap,
++                                u32 texcoord)
+ {
+   auto texUnit = bpmem.tex.GetUnit(texmap);
+ 
+@@ -296,9 +432,9 @@ static inline void CalculateLOD(s32* lodp, bool* linear, u32 texmap, u32 texcoor
+ 
+   float sDelta, tDelta;
+ 
+-  float* uv00 = rasterBlock.Pixel[0][0].Uv[texcoord];
+-  float* uv10 = rasterBlock.Pixel[1][0].Uv[texcoord];
+-  float* uv01 = rasterBlock.Pixel[0][1].Uv[texcoord];
++  const float* uv00 = ctx.rasterBlock.Pixel[0][0].Uv[texcoord];
++  const float* uv10 = ctx.rasterBlock.Pixel[1][0].Uv[texcoord];
++  const float* uv01 = ctx.rasterBlock.Pixel[0][1].Uv[texcoord];
+ 
+   float dudx = fabsf(uv00[0] - uv10[0]);
+   float dvdx = fabsf(uv00[1] - uv10[1]);
+@@ -336,30 +472,30 @@ static inline void CalculateLOD(s32* lodp, bool* linear, u32 texmap, u32 texcoor
+   *lodp = lod;
+ }
+ 
+-static void BuildBlock(s32 blockX, s32 blockY)
++static void BuildBlock(RasterContext& ctx, s32 blockX, s32 blockY)
+ {
+   for (s32 yi = 0; yi < BLOCK_SIZE; yi++)
+   {
+     for (s32 xi = 0; xi < BLOCK_SIZE; xi++)
+     {
+-      RasterBlockPixel& pixel = rasterBlock.Pixel[xi][yi];
++      RasterBlockPixel& pixel = ctx.rasterBlock.Pixel[xi][yi];
+ 
+       s32 x = xi + blockX;
+       s32 y = yi + blockY;
+ 
+-      float invW = 1.0f / WSlope.GetValue(x, y);
++      float invW = 1.0f / ctx.WSlope.GetValue(x, y);
+       pixel.InvW = invW;
+ 
+       // tex coords
+       for (unsigned int i = 0; i < bpmem.genMode.numtexgens; i++)
+       {
+         float projection = invW;
+-        float q = TexSlopes[i][2].GetValue(x, y) * invW;
++        float q = ctx.TexSlopes[i][2].GetValue(x, y) * invW;
+         if (q != 0.0f)
+           projection = invW / q;
+ 
+-        pixel.Uv[i][0] = TexSlopes[i][0].GetValue(x, y) * projection;
+-        pixel.Uv[i][1] = TexSlopes[i][1].GetValue(x, y) * projection;
++        pixel.Uv[i][0] = ctx.TexSlopes[i][0].GetValue(x, y) * projection;
++        pixel.Uv[i][1] = ctx.TexSlopes[i][1].GetValue(x, y) * projection;
+       }
+     }
+   }
+@@ -369,7 +505,8 @@ static void BuildBlock(s32 blockX, s32 blockY)
+     u32 texmap = bpmem.tevindref.getTexMap(i);
+     u32 texcoord = bpmem.tevindref.getTexCoord(i);
+ 
+-    CalculateLOD(&rasterBlock.IndirectLod[i], &rasterBlock.IndirectLinear[i], texmap, texcoord);
++    CalculateLOD(ctx, &ctx.rasterBlock.IndirectLod[i], &ctx.rasterBlock.IndirectLinear[i], texmap,
++                 texcoord);
+   }
+ 
+   for (unsigned int i = 0; i <= bpmem.genMode.numtevstages; i++)
+@@ -381,34 +518,35 @@ static void BuildBlock(s32 blockX, s32 blockY)
+       u32 texmap = order.getTexMap(stageOdd);
+       u32 texcoord = order.getTexCoord(stageOdd);
+ 
+-      CalculateLOD(&rasterBlock.TextureLod[i], &rasterBlock.TextureLinear[i], texmap, texcoord);
++      CalculateLOD(ctx, &ctx.rasterBlock.TextureLod[i], &ctx.rasterBlock.TextureLinear[i], texmap,
++                   texcoord);
+     }
+   }
+ }
+ 
+-void UpdateZSlope(const OutputVertexData* v0, const OutputVertexData* v1,
+-                  const OutputVertexData* v2, s32 x_off, s32 y_off)
++static void UpdateZSlope(RasterContext& ctx, const RasterVertex* v0, const RasterVertex* v1,
++                         const RasterVertex* v2, s32 x_off, s32 y_off)
+ {
+   if (!bpmem.genMode.zfreeze)
+   {
+     const s32 X1 = iround(16.0f * (v0->screenPosition.x - x_off)) - 9;
+     const s32 Y1 = iround(16.0f * (v0->screenPosition.y - y_off)) - 9;
+-    const SlopeContext ctx(v0, v1, v2, (X1 + 0xF) >> 4, (Y1 + 0xF) >> 4, x_off, y_off);
+-    ZSlope = Slope(v0->screenPosition.z, v1->screenPosition.z, v2->screenPosition.z, ctx);
++    const SlopeContext sctx(v0, v1, v2, (X1 + 0xF) >> 4, (Y1 + 0xF) >> 4, x_off, y_off);
++    ctx.ZSlope = Slope(v0->screenPosition.z, v1->screenPosition.z, v2->screenPosition.z, sctx);
+   }
+ }
+ 
+-static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertexData* v1,
+-                                  const OutputVertexData* v2,
+-                                  const BPFunctions::ScissorRect& scissor)
++// Rasterizes the triangle's rows in [band_top, band_bottom). The z-slope update and the
++// scissor rejection happen exactly as upstream, before the band is applied, so the zfreeze
++// slope history is identical whichever thread draws which rows.
++static void DrawTriangleFrontFace(RasterContext& ctx, const RasterVertex* v0,
++                                  const RasterVertex* v1, const RasterVertex* v2,
++                                  const BPFunctions::ScissorRect& scissor, s32 band_top,
++                                  s32 band_bottom)
+ {
+-#ifdef __EMSCRIPTEN__
+-  DolphinWeb::RasterProfile::SampledScope profile_scope(
+-      DolphinWeb::RasterProfile::Phase::RasterTraversal);
+-#endif
+   // The zslope should be updated now, even if the triangle is rejected by the scissor test, as
+   // zfreeze depends on it
+-  UpdateZSlope(v0, v1, v2, scissor.x_off, scissor.y_off);
++  UpdateZSlope(ctx, v0, v1, v2, scissor.x_off, scissor.y_off);
+ 
+   // adapted from http://devmaster.net/posts/6145/advanced-rasterization
+ 
+@@ -460,28 +598,44 @@ static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertex
+   if (minx >= maxx || miny >= maxy)
+     return;
+ 
++  // This thread's band. Band edges are even, so the 2x2 blocks below never straddle one.
++  miny = std::max(miny, band_top);
++  maxy = std::min(maxy, band_bottom);
++
++  if (miny >= maxy)
++    return;
++
++#ifdef __EMSCRIPTEN__
++  // Sampled per (triangle, band) pair that has rows to draw: with worker threads a tall
++  // triangle is counted once per band it touches, each count covering only that band's rows.
++  DolphinWeb::RasterProfile::SampledScope profile_scope(
++      DolphinWeb::RasterProfile::Phase::RasterTraversal);
++#endif
++
+   // Set up the remaining slopes
+-  const SlopeContext ctx(v0, v1, v2, (X1 + 0xF) >> 4, (Y1 + 0xF) >> 4, scissor.x_off,
+-                         scissor.y_off);
++  const SlopeContext sctx(v0, v1, v2, (X1 + 0xF) >> 4, (Y1 + 0xF) >> 4, scissor.x_off,
++                          scissor.y_off);
+ 
+-  float w[3] = {1.0f / v0->projectedPosition.w, 1.0f / v1->projectedPosition.w,
+-                1.0f / v2->projectedPosition.w};
+-  WSlope = Slope(w[0], w[1], w[2], ctx);
++  float w[3] = {1.0f / v0->w, 1.0f / v1->w, 1.0f / v2->w};
++  ctx.WSlope = Slope(w[0], w[1], w[2], sctx);
+ 
+   for (unsigned int i = 0; i < bpmem.genMode.numcolchans; i++)
+   {
+     for (int comp = 0; comp < 4; comp++)
+-      ColorSlopes[i][comp] = Slope(v0->color[i][comp], v1->color[i][comp], v2->color[i][comp], ctx);
++    {
++      ctx.ColorSlopes[i][comp] =
++          Slope(v0->color[i][comp], v1->color[i][comp], v2->color[i][comp], sctx);
++    }
+   }
+ 
+   for (unsigned int i = 0; i < bpmem.genMode.numtexgens; i++)
+   {
+-    TexSlopes[i][0] =
+-        Slope(v0->texCoords[i].x * w[0], v1->texCoords[i].x * w[1], v2->texCoords[i].x * w[2], ctx);
+-    TexSlopes[i][1] =
+-        Slope(v0->texCoords[i].y * w[0], v1->texCoords[i].y * w[1], v2->texCoords[i].y * w[2], ctx);
+-    TexSlopes[i][2] =
+-        Slope(v0->texCoords[i].z * w[0], v1->texCoords[i].z * w[1], v2->texCoords[i].z * w[2], ctx);
++    ctx.TexSlopes[i][0] = Slope(v0->texCoords[i].x * w[0], v1->texCoords[i].x * w[1],
++                                v2->texCoords[i].x * w[2], sctx);
++    ctx.TexSlopes[i][1] = Slope(v0->texCoords[i].y * w[0], v1->texCoords[i].y * w[1],
++                                v2->texCoords[i].y * w[2], sctx);
++    ctx.TexSlopes[i][2] = Slope(v0->texCoords[i].z * w[0], v1->texCoords[i].z * w[1],
++                                v2->texCoords[i].z * w[2], sctx);
+   }
+ 
+   // Half-edge constants
+@@ -538,7 +692,7 @@ static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertex
+       if (a == 0x0 || b == 0x0 || c == 0x0)
+         continue;
+ 
+-      BuildBlock(x, y);
++      BuildBlock(ctx, x, y);
+ 
+       // Accept whole block when totally covered
+       // We still need to check min/max x/y because of the scissor
+@@ -548,7 +702,7 @@ static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertex
+         {
+           for (s32 ix = 0; ix < BLOCK_SIZE; ix++)
+           {
+-            Draw(x + ix, y + iy, ix, iy);
++            Draw(ctx, x + ix, y + iy, ix, iy);
+           }
+         }
+       }
+@@ -571,7 +725,7 @@ static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertex
+               // This check enforces the scissor rectangle, since it might not be aligned with the
+               // blocks
+               if (x + ix >= minx && x + ix < maxx && y + iy >= miny && y + iy < maxy)
+-                Draw(x + ix, y + iy, ix, iy);
++                Draw(ctx, x + ix, y + iy, ix, iy);
+             }
+ 
+             CX1 -= FDY12;
+@@ -588,12 +742,346 @@ static void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertex
+   }
+ }
+ 
++// Folds a thread's per-batch counters into the shared statistics, perf-query counters and
++// bounding box. These are all sums or min/max, so merging per band gives the same totals as
++// upstream's per-pixel updates. The lock also covers the inline (single-threaded) path, where
++// it is uncontended.
++static void MergeContextStats(RasterContext& ctx)
++{
++  while (s_merge_lock.test_and_set(std::memory_order_acquire))
++  {
++  }
++  ADDSTAT(g_stats.this_frame.rasterized_pixels, ctx.rasterized_pixels);
++  ADDSTAT(g_stats.this_frame.tev_pixels_in, ctx.tev.stats_pixels_in);
++  ADDSTAT(g_stats.this_frame.tev_pixels_out, ctx.tev.stats_pixels_out);
++  if (ctx.tev.bbox_left <= ctx.tev.bbox_right)
++  {
++    BBoxManager::Update(ctx.tev.bbox_left, ctx.tev.bbox_right, ctx.tev.bbox_top,
++                        ctx.tev.bbox_bottom);
++  }
++  EfbInterface::FlushPerfCounters();
++  s_merge_lock.clear(std::memory_order_release);
++
++  ctx.rasterized_pixels = 0;
++  ctx.tev.ResetBatchAccumulators();
++}
++
++// Upstream order and the whole EFB: used when no worker threads exist or the batch is small.
++static void ExecuteOpInline(RasterContext& ctx, const RasterOp& op)
++{
++  if (op.zslope_only)
++  {
++    UpdateZSlope(ctx, &op.v[0], &op.v[1], &op.v[2], op.x_off, op.y_off);
++    return;
++  }
++  for (const auto& scissor : scissors)
++  {
++    DrawTriangleFrontFace(ctx, &op.v[0], &op.v[1], &op.v[2], scissor, 0,
++                          static_cast<s32>(EFB_HEIGHT));
++  }
++}
++
++// Within one batch the z slope has no cross-triangle dependency: with zfreeze off every
++// triangle derives it from its own vertices, with zfreeze on nothing updates it. Only the
++// value left behind for the next batch matters, and this restores exactly what sequential
++// execution would have left.
++static void FinishZSlope(RasterContext& ctx, const RasterOp& last)
++{
++  if (last.zslope_only)
++  {
++    UpdateZSlope(ctx, &last.v[0], &last.v[1], &last.v[2], last.x_off, last.y_off);
++  }
++  else if (!scissors.empty())
++  {
++    const auto& scissor = scissors.back();
++    UpdateZSlope(ctx, &last.v[0], &last.v[1], &last.v[2], scissor.x_off, scissor.y_off);
++  }
++}
++
++static void RasterizeBand(RasterContext& ctx, u32 band)
++{
++  const s32 band_top = static_cast<s32>(band * BAND_HEIGHT);
++  const s32 band_bottom =
++      std::min(band_top + static_cast<s32>(BAND_HEIGHT), static_cast<s32>(EFB_HEIGHT));
++  const RasterOp* ops = s_pool.ops;
++  const std::size_t count = s_pool.op_count;
++  for (std::size_t i = 0; i < count; ++i)
++  {
++    const RasterOp& op = ops[i];
++    if (op.zslope_only || op.maxy <= band_top || op.miny >= band_bottom)
++      continue;
++    for (const auto& scissor : scissors)
++      DrawTriangleFrontFace(ctx, &op.v[0], &op.v[1], &op.v[2], scissor, band_top, band_bottom);
++  }
++}
++
++static void PrepareContextForJob(RasterContext& ctx, u32 generation)
++{
++  ctx.ZSlope = s_pool.initial_zslope;
++  ctx.tev.CopyBatchState(*s_pool.master_tev);
++  ctx.tev.ResetBatchAccumulators();
++  ctx.rasterized_pixels = 0;
++  ctx.prepared_generation = generation;
++}
++
++// Claims the next unprocessed band of the published job, or returns false when none is left.
++static bool ClaimBand(u32* band, u32* generation)
++{
++  u32 s = s_pool.state.load(std::memory_order_acquire);
++  for (;;)
++  {
++    if ((s & 0xFFu) >= BAND_COUNT)
++      return false;
++    if (s_pool.state.compare_exchange_weak(s, s + 1, std::memory_order_acq_rel,
++                                           std::memory_order_acquire))
++    {
++      *band = s & 0xFFu;
++      *generation = s >> 8;
++      return true;
++    }
++  }
++}
++
++static void ProcessClaimedBand(RasterContext& ctx, u32 band)
++{
++  RasterizeBand(ctx, band);
++  MergeContextStats(ctx);
++  s_pool.bands_done.fetch_add(1, std::memory_order_acq_rel);
++}
++
++static void WaitForNewWork(u32 observed_state)
++{
++#ifdef __EMSCRIPTEN__
++  s_pool.sleepers.fetch_add(1, std::memory_order_acq_rel);
++  if (s_pool.state.load(std::memory_order_acquire) == observed_state &&
++      !s_pool.quit.load(std::memory_order_acquire))
++  {
++    // The futex compares the word itself, so a publish between the check above and this wait
++    // returns immediately; the timeout only bounds a missed wake.
++    emscripten_futex_wait(reinterpret_cast<volatile void*>(&s_pool.state), observed_state, 20.0);
++  }
++  s_pool.sleepers.fetch_sub(1, std::memory_order_acq_rel);
++#else
++  (void)observed_state;
++  std::this_thread::sleep_for(std::chrono::microseconds(200));
++#endif
++}
++
++static void WorkerMain(u32 index)
++{
++  char name[32];
++  std::snprintf(name, sizeof(name), "SW raster %u", index);
++  Common::SetCurrentThreadName(name);
++
++  RasterContext& ctx = LocalContext();
++  s_pool.started.fetch_add(1, std::memory_order_acq_rel);
++  for (;;)
++  {
++    u32 band = 0;
++    u32 generation = 0;
++    if (ClaimBand(&band, &generation))
++    {
++      if (ctx.prepared_generation != generation)
++        PrepareContextForJob(ctx, generation);
++      ProcessClaimedBand(ctx, band);
++      s_pool.worker_bands.fetch_add(1, std::memory_order_relaxed);
++      continue;
++    }
++    // Between jobs: the next one must re-copy the batch constants whatever its generation.
++    ctx.prepared_generation = GENERATION_UNPREPARED;
++    if (s_pool.quit.load(std::memory_order_acquire))
++      return;
++
++    const u32 observed = s_pool.state.load(std::memory_order_acquire);
++    const auto spin_until = std::chrono::steady_clock::now() + WORKER_SPIN;
++    bool woke = false;
++    for (u32 i = 0;; ++i)
++    {
++      if (s_pool.state.load(std::memory_order_acquire) != observed ||
++          s_pool.quit.load(std::memory_order_acquire))
++      {
++        woke = true;
++        break;
++      }
++      if ((i & 255u) == 255u && std::chrono::steady_clock::now() >= spin_until)
++        break;
++    }
++    if (!woke)
++      WaitForNewWork(observed);
++  }
++}
++
++static void RunQueuedOps()
++{
++  if (s_ops.empty())
++    return;
++
++  RasterContext& ctx = LocalContext();
++  const bool parallel = !s_pool.threads.empty() && s_queued_area >= PARALLEL_MIN_AREA;
++  if (!parallel)
++  {
++    for (const RasterOp& op : s_ops)
++      ExecuteOpInline(ctx, op);
++    MergeContextStats(ctx);
++  }
++  else
++  {
++    // Publish the job, then take part in it: bands are handed out dynamically, so the GPU
++    // thread never waits on a worker that has not been scheduled yet.
++    s_pool.ops = s_ops.data();
++    s_pool.op_count = s_ops.size();
++    s_pool.initial_zslope = ctx.ZSlope;
++    s_pool.master_tev = &ctx.tev;
++    s_pool.bands_done.store(0, std::memory_order_relaxed);
++    const u32 generation = ((s_pool.state.load(std::memory_order_relaxed) >> 8) + 1) & 0xFFFFFFu;
++    s_pool.state.store(generation << 8, std::memory_order_release);
++#ifdef __EMSCRIPTEN__
++    if (s_pool.sleepers.load(std::memory_order_acquire) != 0)
++      emscripten_futex_wake(reinterpret_cast<volatile void*>(&s_pool.state), INT_MAX);
++#endif
++
++    ctx.prepared_generation = generation;
++    u32 band = 0;
++    u32 claimed_generation = 0;
++    while (ClaimBand(&band, &claimed_generation))
++      ProcessClaimedBand(ctx, band);
++    while (s_pool.bands_done.load(std::memory_order_acquire) < BAND_COUNT)
++    {
++    }
++
++    FinishZSlope(ctx, s_ops.back());
++  }
++
++  s_ops.clear();
++  s_queued_area = 0;
++}
++
++// Rows and bounding-box area a triangle can touch, over the union of the scissor rectangles.
++// Mirrors the rejection in DrawTriangleFrontFace so the band scan never misses a row.
++static void ComputeOpBounds(RasterOp* op)
++{
++  s32 miny = static_cast<s32>(EFB_HEIGHT);
++  s32 maxy = 0;
++  u64 area = 0;
++  for (const auto& scissor : scissors)
++  {
++    const s32 Y1 = iround(16.0f * (op->v[0].screenPosition.y - scissor.y_off)) - 9;
++    const s32 Y2 = iround(16.0f * (op->v[1].screenPosition.y - scissor.y_off)) - 9;
++    const s32 Y3 = iround(16.0f * (op->v[2].screenPosition.y - scissor.y_off)) - 9;
++    const s32 X1 = iround(16.0f * (op->v[0].screenPosition.x - scissor.x_off)) - 9;
++    const s32 X2 = iround(16.0f * (op->v[1].screenPosition.x - scissor.x_off)) - 9;
++    const s32 X3 = iround(16.0f * (op->v[2].screenPosition.x - scissor.x_off)) - 9;
++
++    const s32 tminx = std::max((std::min(std::min(X1, X2), X3) + 0xF) >> 4, scissor.rect.left);
++    const s32 tmaxx = std::min((std::max(std::max(X1, X2), X3) + 0xF) >> 4, scissor.rect.right);
++    const s32 tminy = std::max((std::min(std::min(Y1, Y2), Y3) + 0xF) >> 4, scissor.rect.top);
++    const s32 tmaxy = std::min((std::max(std::max(Y1, Y2), Y3) + 0xF) >> 4, scissor.rect.bottom);
++    if (tminx >= tmaxx || tminy >= tmaxy)
++      continue;
++    miny = std::min(miny, tminy);
++    maxy = std::max(maxy, tmaxy);
++    area += static_cast<u64>(tmaxx - tminx) * static_cast<u64>(tmaxy - tminy);
++  }
++  op->miny = static_cast<s16>(miny);
++  op->maxy = static_cast<s16>(maxy);
++  s_queued_area += area;
++}
++
++static void Enqueue(RasterOp&& op)
++{
++  s_ops.push_back(std::move(op));
++  if (s_ops.size() >= QUEUE_FLUSH_OPS)
++    RunQueuedOps();
++}
++
++void BeginBatch()
++{
++  RasterContext& ctx = LocalContext();
++  ctx.rasterized_pixels = 0;
++  ctx.tev.ResetBatchAccumulators();
++  s_ops.clear();
++  s_queued_area = 0;
++  s_batch_active = true;
++}
++
++void EndBatch()
++{
++  RunQueuedOps();
++  s_batch_active = false;
++}
++
++void UpdateZSlope(const OutputVertexData* v0, const OutputVertexData* v1,
++                  const OutputVertexData* v2, s32 x_off, s32 y_off)
++{
++  RasterOp op;
++  op.v[0] = RasterVertex::From(v0);
++  op.v[1] = RasterVertex::From(v1);
++  op.v[2] = RasterVertex::From(v2);
++  op.zslope_only = true;
++  op.x_off = x_off;
++  op.y_off = y_off;
++  if (!s_batch_active)
++  {
++    ExecuteOpInline(LocalContext(), op);
++    return;
++  }
++  Enqueue(std::move(op));
++}
++
+ void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertexData* v1,
+                            const OutputVertexData* v2)
+ {
+   INCSTAT(g_stats.this_frame.num_triangles_drawn);
+ 
+-  for (const auto& scissor : scissors)
+-    DrawTriangleFrontFace(v0, v1, v2, scissor);
++  RasterOp op;
++  op.v[0] = RasterVertex::From(v0);
++  op.v[1] = RasterVertex::From(v1);
++  op.v[2] = RasterVertex::From(v2);
++  if (!s_batch_active)
++  {
++    RasterContext& ctx = LocalContext();
++    ExecuteOpInline(ctx, op);
++    MergeContextStats(ctx);
++    return;
++  }
++  ComputeOpBounds(&op);
++  Enqueue(std::move(op));
++}
++
++void Init()
++{
++  // The other slopes are set each for each primitive drawn, but zfreeze means that the z slope
++  // needs to be set to an (untested) default value.
++  LocalContext().ZSlope = Slope();
++  s_ops.clear();
++  s_ops.reserve(1024);
++  s_queued_area = 0;
++  s_batch_active = false;
++
++  Shutdown();
++  const int requested = std::clamp(DolphinWeb_SoftwareRasterThreads(), 0, static_cast<int>(MAX_WORKERS));
++  s_pool.quit.store(false, std::memory_order_release);
++  s_pool.state.store(BAND_COUNT, std::memory_order_release);
++  s_pool.bands_done.store(0, std::memory_order_release);
++  s_pool.started.store(0, std::memory_order_release);
++  s_pool.worker_bands.store(0, std::memory_order_release);
++  for (int i = 0; i < requested; ++i)
++    s_pool.threads.emplace_back(WorkerMain, static_cast<u32>(i));
++  DolphinWeb_SetSoftwareRasterThreadsActive(requested);
++}
++
++void Shutdown()
++{
++  if (s_pool.threads.empty())
++    return;
++  s_pool.quit.store(true, std::memory_order_release);
++#ifdef __EMSCRIPTEN__
++  emscripten_futex_wake(reinterpret_cast<volatile void*>(&s_pool.state), INT_MAX);
++#endif
++  for (std::thread& thread : s_pool.threads)
++    thread.join();
++  s_pool.threads.clear();
++  s_pool.quit.store(false, std::memory_order_release);
++  DolphinWeb_SetSoftwareRasterThreadsActive(0);
+ }
+ }  // namespace Rasterizer
+diff --git a/Source/Core/VideoBackends/Software/Rasterizer.h b/Source/Core/VideoBackends/Software/Rasterizer.h
+index dd5ddfdda2..f702ab0717 100644
+--- a/Source/Core/VideoBackends/Software/Rasterizer.h
++++ b/Source/Core/VideoBackends/Software/Rasterizer.h
+@@ -10,8 +10,17 @@ struct OutputVertexData;
+ namespace Rasterizer
+ {
+ void Init();
++void Shutdown();
+ void ScissorChanged();
+ 
++// A batch is one SWVertexLoader::DrawCurrentBatch: the BP/XF/CP state is constant for its
++// duration (every register write flushes pending vertices first). Triangles submitted between
++// BeginBatch and EndBatch are queued and rasterized at EndBatch, in order, split across the
++// worker threads by horizontal bands of the EFB when there are enough pixels to make that pay.
++// Outside a batch, triangles are rasterized immediately on the calling thread.
++void BeginBatch();
++void EndBatch();
++
+ void UpdateZSlope(const OutputVertexData* v0, const OutputVertexData* v1,
+                   const OutputVertexData* v2, s32 x_off, s32 y_off);
+ void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertexData* v1,
+@@ -20,6 +29,14 @@ void DrawTriangleFrontFace(const OutputVertexData* v0, const OutputVertexData* v
+ void SetTevKonstColors();
+ void ClassifyTevHotCase();
+ 
++// Number of worker threads rasterizing alongside the GPU thread (0 = upstream single-threaded),
++// and how many of them have begun running (threads start asynchronously in the browser).
++int ActiveWorkerThreads();
++int StartedWorkerThreads();
++// Bands drawn by worker threads (not the GPU thread) since Init; evidence that jobs really
++// ran in parallel.
++u64 WorkerBandsProcessed();
++
+ struct RasterBlockPixel
+ {
+   float InvW;
+diff --git a/Source/Core/VideoBackends/Software/SWEfbInterface.cpp b/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
+index 91bd9ac125..6965976c09 100644
+--- a/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
++++ b/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
+@@ -882,17 +882,31 @@ void ResetPerfQuery()
+   perf_values = {};
+ }
+ 
++// Rasterizer worker threads count into their own copies; the GPU thread folds them into
++// perf_values under the rasterizer's merge lock (FlushPerfCounters), so the shared array is
++// only ever written by one thread at a time.
++static thread_local std::array<u32, PQ_NUM_MEMBERS> t_perf_quad{};
++static thread_local std::array<u32, PQ_NUM_MEMBERS> t_perf_pending{};
++
+ void IncPerfCounterQuadCount(PerfQueryType type)
+ {
+   // NOTE: hardware doesn't process individual pixels but quads instead.
+   // Current software renderer architecture works on pixels though, so
+   // we have this "quad" hack here to only increment the registers on
+   // every fourth rendered pixel
+-  static u32 quad[PQ_NUM_MEMBERS];
+-  if (++quad[type] != 3)
++  if (++t_perf_quad[type] != 3)
+     return;
+-  quad[type] = 0;
+-  ++perf_values[type];
++  t_perf_quad[type] = 0;
++  ++t_perf_pending[type];
++}
++
++void FlushPerfCounters()
++{
++  for (std::size_t i = 0; i < perf_values.size(); ++i)
++  {
++    perf_values[i] += t_perf_pending[i];
++    t_perf_pending[i] = 0;
++  }
+ }
+ }  // namespace EfbInterface
+ 
+diff --git a/Source/Core/VideoBackends/Software/SWEfbInterface.h b/Source/Core/VideoBackends/Software/SWEfbInterface.h
+index 3eb44049a6..d3ac35089a 100644
+--- a/Source/Core/VideoBackends/Software/SWEfbInterface.h
++++ b/Source/Core/VideoBackends/Software/SWEfbInterface.h
+@@ -56,7 +56,10 @@ void EncodeXFB(u8* xfb_in_ram, u32 memory_stride, const MathUtil::Rectangle<int>
+ 
+ u32 GetPerfQueryResult(PerfQueryType type);
+ void ResetPerfQuery();
++// Counts on the calling thread; FlushPerfCounters folds that thread's counts into the shared
++// results. The rasterizer calls it under its merge lock at the end of every band or batch.
+ void IncPerfCounterQuadCount(PerfQueryType type);
++void FlushPerfCounters();
+ }  // namespace EfbInterface
+ 
+ namespace SW
+diff --git a/Source/Core/VideoBackends/Software/SWVertexLoader.cpp b/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
+index d2eaffa53e..3005c659a6 100644
+--- a/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
++++ b/Source/Core/VideoBackends/Software/SWVertexLoader.cpp
+@@ -63,6 +63,9 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
+     g_bounding_box->Flush();
+ 
+   m_setup_unit.Init(primitive_type);
++  // Triangles are queued until EndBatch, where they are rasterized in order, in parallel
++  // across EFB bands when the batch is large enough (see Rasterizer.cpp).
++  Rasterizer::BeginBatch();
+   Rasterizer::SetTevKonstColors();
+   // BP/TEV state is stable for the submitted GX batch. Classify the exact
+   // measured program once here rather than rebuilding its tuple per pixel.
+@@ -90,6 +93,8 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
+     INCSTAT(g_stats.this_frame.num_vertices_loaded);
+   }
+ 
++  Rasterizer::EndBatch();
++
+   INCSTAT(g_stats.this_frame.num_drawn_objects);
+ }
+ 
+diff --git a/Source/Core/VideoBackends/Software/SWmain.cpp b/Source/Core/VideoBackends/Software/SWmain.cpp
+index 66c96f5a16..85d62eaaa5 100644
+--- a/Source/Core/VideoBackends/Software/SWmain.cpp
++++ b/Source/Core/VideoBackends/Software/SWmain.cpp
+@@ -106,6 +106,7 @@ bool VideoSoftware::Initialize(const WindowSystemInfo& wsi)
+ 
+ void VideoSoftware::Shutdown()
+ {
++  Rasterizer::Shutdown();
+   ShutdownShared();
+ }
+ }  // namespace SW
+diff --git a/Source/Core/VideoBackends/Software/Tev.cpp b/Source/Core/VideoBackends/Software/Tev.cpp
+index 807bf97905..8ce37d97d4 100644
+--- a/Source/Core/VideoBackends/Software/Tev.cpp
++++ b/Source/Core/VideoBackends/Software/Tev.cpp
+@@ -601,7 +601,7 @@ void Tev::Draw()
+   ASSERT(Position[0] >= 0 && Position[0] < s32(EFB_WIDTH));
+   ASSERT(Position[1] >= 0 && Position[1] < s32(EFB_HEIGHT));
+ 
+-  INCSTAT(g_stats.this_frame.tev_pixels_in);
++  ++stats_pixels_in;
+ 
+   auto& system = Core::System::GetInstance();
+   auto& pixel_shader_manager = system.GetPixelShaderManager();
+@@ -938,16 +938,39 @@ void Tev::Draw()
+   }
+ 
+   // The GC/Wii GPU rasterizes in 2x2 pixel groups, so bounding box values will be rounded to the
+-  // extents of these groups, rather than the exact pixel.
+-  BBoxManager::Update(static_cast<u16>(Position[0] & ~1), static_cast<u16>(Position[0] | 1),
+-                      static_cast<u16>(Position[1] & ~1), static_cast<u16>(Position[1] | 1));
+-
+-  INCSTAT(g_stats.this_frame.tev_pixels_out);
++  // extents of these groups, rather than the exact pixel. Accumulated per batch and folded into
++  // BBoxManager by the rasterizer, which may be running this Tev on a worker thread.
++  bbox_left = std::min(bbox_left, static_cast<u16>(Position[0] & ~1));
++  bbox_right = std::max(bbox_right, static_cast<u16>(Position[0] | 1));
++  bbox_top = std::min(bbox_top, static_cast<u16>(Position[1] & ~1));
++  bbox_bottom = std::max(bbox_bottom, static_cast<u16>(Position[1] | 1));
++
++  ++stats_pixels_out;
+   EfbInterface::IncPerfCounterQuadCount(PQ_BLEND_INPUT);
+ 
+   EfbInterface::BlendTev(Position[0], Position[1], output);
+ }
+ 
++void Tev::ResetBatchAccumulators()
++{
++  stats_pixels_in = 0;
++  stats_pixels_out = 0;
++  bbox_left = 0xFFFF;
++  bbox_right = 0;
++  bbox_top = 0xFFFF;
++  bbox_bottom = 0;
++}
++
++void Tev::CopyBatchState(const Tev& master)
++{
++  KonstantColors = master.KonstantColors;
++  m_hot_case = master.m_hot_case;
++  m_hot_case_mode = master.m_hot_case_mode;
++  m_hot_case_mode_generation = master.m_hot_case_mode_generation;
++  m_hot_case_latched_off = master.m_hot_case_latched_off;
++  m_hot_case_metrics_enabled = master.m_hot_case_metrics_enabled;
++}
++
+ void Tev::SetKonstColors()
+ {
+   auto& system = Core::System::GetInstance();
+diff --git a/Source/Core/VideoBackends/Software/Tev.h b/Source/Core/VideoBackends/Software/Tev.h
+index 2155f35fff..0cd19febde 100644
+--- a/Source/Core/VideoBackends/Software/Tev.h
++++ b/Source/Core/VideoBackends/Software/Tev.h
+@@ -246,4 +246,18 @@ public:
+   void SetKonstColors();
+   void ClassifyHotCaseDraw();
+   void Draw();
++
++  // Per-batch accumulators. The rasterizer may shade a batch on several threads; a Tev never
++  // touches the shared statistics or bounding box itself, the rasterizer merges these on the
++  // GPU thread (Rasterizer::EndBatch / MergeContextStats).
++  u32 stats_pixels_in = 0;
++  u32 stats_pixels_out = 0;
++  u16 bbox_left = 0xFFFF;
++  u16 bbox_right = 0;
++  u16 bbox_top = 0xFFFF;
++  u16 bbox_bottom = 0;
++  void ResetBatchAccumulators();
++  // Copies the batch-constant state (konst colors, hot-case classification) from the GPU
++  // thread's Tev so a worker thread shades the batch identically.
++  void CopyBatchState(const Tev& master);
+ };

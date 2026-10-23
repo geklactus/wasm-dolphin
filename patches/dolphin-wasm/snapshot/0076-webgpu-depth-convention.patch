@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: wasm-dolphin patch snapshot <snapshot@local.invalid>
-Date: Fri, 23 Oct 2026 12:23:18 +0000
-Subject: [PATCH] 0075-webgpu-depth-convention
+Date: Fri, 23 Oct 2026 12:31:36 +0000
+Subject: [PATCH] 0076-webgpu-depth-convention
 
 The WebGPU backend reports bSupportsReversedDepthRange = false and runs that
 convention: BPFunctions maps the vertex shader's reverse-Z output through a
@@ -23,7 +23,7 @@ path: the depth-based effects 3D gameplay uses and menus never do.
   such ranges inside out.
 
 diff --git a/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp b/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
-index 143e7f89b6..f1dd784470 100644
+index 143e7f89b6..9647ed474d 100644
 --- a/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
 @@ -156,58 +156,23 @@ void VideoBackend::InitBackendInfo(const WindowSystemInfo& /* wsi */)
@@ -87,7 +87,7 @@ index 143e7f89b6..f1dd784470 100644
 +  // buffer holds 1 - console depth, and the consumer flips every depth compare and clears depth
 +  // to 0.0 (the console's far). With the flag false VideoCommon also applies the matching
 +  // 1 - x to fog, per-pixel depth, EFB depth copies, EFB peeks/pokes and clear values. The
-+  // cores before patch 0075 gated those out for this backend (the §28 session notes), which
++  // cores before patch 0076 gated those out for this backend (the §28 session notes), which
 +  // inverted fog, z-texture depth and depth copies on the hardware path while plain
 +  // depth-tested geometry still rendered -- the 3D effects menus never use.
 +  // bWebGPULegacyDepthConvention restores that for bisection (`?wgpudepthlegacy=1`).
@@ -204,14 +204,14 @@ index 848fcf9c17..1959e06226 100644
    u32 m_cur_pipeline_id = 0;
    u32 m_last_set_pipeline_id = 0;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h b/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h
-index f6a99da518..dbc42bd3ae 100644
+index f6a99da518..e978020d78 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h
 @@ -44,6 +44,13 @@ inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_LOGIC_OP_IN_VIDEOCOMM
  // to need; src/game-profiles.js turns it on per game.
  inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_READBACK = 1u << 3;
  
-+// Bit 4: the depth convention of the cores before patch 0075. OFF by default. The backend
++// Bit 4: the depth convention of the cores before patch 0076. OFF by default. The backend
 +// stores reverse-Z window depth (1 - console depth; the consumer clears to 0.0 and flips every
 +// depth compare), but those cores skipped VideoCommon's matching 1 - x conversions for fog,
 +// per-pixel depth, EFB depth copies, EFB peeks/pokes and clear values, and sent the consumer no
@@ -240,7 +240,7 @@ index cbf5fb1c0b..5aa5480267 100644
    g_vertex_manager->UploadUtilityUniforms(&uniforms, sizeof(uniforms));
  
 diff --git a/Source/Core/VideoCommon/EFBInterface.cpp b/Source/Core/VideoCommon/EFBInterface.cpp
-index a1c5a24098..f15bfc8b85 100644
+index a1c5a24098..3597149055 100644
 --- a/Source/Core/VideoCommon/EFBInterface.cpp
 +++ b/Source/Core/VideoCommon/EFBInterface.cpp
 @@ -99,15 +99,11 @@ u32 HardwareEFBInterface::PeekDepthInternal(FramebufferManager* framebuffer_mana
@@ -258,7 +258,7 @@ index a1c5a24098..f15bfc8b85 100644
 -      g_backend_info.api_type != APIType::Vulkan)
 +  // wasm-dolphin: the WebGPU backend genuinely stores 1 - depth (its consumer clears depth to
 +  // 0.0 and flips every depth compare), so this conversion applies to it as to any backend
-+  // without reversed depth ranges. bWebGPULegacyDepthConvention reproduces the pre-0075 cores,
++  // without reversed depth ranges. bWebGPULegacyDepthConvention reproduces the pre-0076 cores,
 +  // which skipped it.
 +  if (!g_backend_info.bSupportsReversedDepthRange && !g_backend_info.bWebGPULegacyDepthConvention)
      depth = 1.0f - depth;
@@ -311,7 +311,7 @@ index c798b90325..fbcbb83f0e 100644
              : 0.0f);
      return;
 diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommon/PixelShaderGen.cpp
-index c7307371de..f78afc80bf 100644
+index c7307371de..60cded0925 100644
 --- a/Source/Core/VideoCommon/PixelShaderGen.cpp
 +++ b/Source/Core/VideoCommon/PixelShaderGen.cpp
 @@ -1159,16 +1159,10 @@ ShaderCode GeneratePixelShaderCode(APIType api_type, const ShaderHostConfig& hos
@@ -329,7 +329,7 @@ index c7307371de..f78afc80bf 100644
 -    // colour (the §28b regression). OGL/D3D/SW untouched.
 -    if (!host_config.backend_reversed_depth_range && api_type != APIType::Vulkan)
 +    // A backend without reversed depth ranges holds 1 - console depth in the depth buffer
-+    // (BPFunctions::SetScissorAndViewport). The WebGPU backend is one; its pre-0075 cores read
++    // (BPFunctions::SetScissorAndViewport). The WebGPU backend is one; its pre-0076 cores read
 +    // the window depth as console depth here, which inverted fog on the hardware path.
 +    if (!host_config.backend_reversed_depth_range && !g_backend_info.bWebGPULegacyDepthConvention)
        out.Write("\tint zCoord = int((1.0 - rawpos.z) * 16777216.0);\n");
@@ -457,7 +457,7 @@ index 6d69803827..60d9c7262b 100644
    if (!g_backend_info.bSupportsDepthClamp)
      return false;
 diff --git a/Source/Core/VideoCommon/VideoConfig.h b/Source/Core/VideoCommon/VideoConfig.h
-index e16015491b..df1409d111 100644
+index e16015491b..05538499fb 100644
 --- a/Source/Core/VideoCommon/VideoConfig.h
 +++ b/Source/Core/VideoCommon/VideoConfig.h
 @@ -181,6 +181,14 @@ struct BackendInfo
@@ -465,7 +465,7 @@ index e16015491b..df1409d111 100644
    bool bSupportsHDROutput = false;
    bool bSupportsUnrestrictedDepthRange = false;
 +
-+  // wasm-dolphin: the depth convention the WebGPU cores before patch 0075 shipped with, kept
++  // wasm-dolphin: the depth convention the WebGPU cores before patch 0076 shipped with, kept
 +  // as a bisection switch (`?wgpudepthlegacy=1`, renderer feature mask bit 1). That backend
 +  // reports bSupportsReversedDepthRange = false and stores 1 - console depth, but those cores
 +  // skipped the matching 1 - x conversions of fog, per-pixel depth, EFB depth copies, EFB
