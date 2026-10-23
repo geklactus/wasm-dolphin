@@ -1,0 +1,112 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 06:42:03 +0000
+Subject: [PATCH] 0070-compile-wall-budget
+
+
+diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index 49bbc0c9e3..337f7140d8 100644
+--- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
++++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+@@ -276,6 +276,7 @@ constexpr u32 DOLPHIN_WEB_DISABLE_BLOCK_MERGE = 1u << 17; // §28bx adjacent-blo
+ constexpr u32 DOLPHIN_WEB_DISABLE_REGALLOC    = 1u << 20; // §28by GPR regalloc / dead-store-skip (default-off)
+ constexpr u32 DOLPHIN_WEB_DISABLE_SHORT_PREFIX = 1u << 21; // §28ca lower JIT min-prefix 4→2 (default-off)
+ constexpr u32 DOLPHIN_WEB_DISABLE_COMPILE_THROTTLE = 1u << 22; // §28ce cap JIT compiles/slice (default-off)
++constexpr u32 DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET = 1u << 24; // §29a wall-clock compile budget (default-on)
+ // §28cz fastmem bounds-check HOIST. ENABLE polarity (NOT a disable bit): the
+ // per-block range-check hoist is emitted ONLY when this bit is SET. Default
+ // mask 0 → feature OFF → byte-identical codegen to today. ?fastmemhoist=1 opts
+@@ -288,6 +289,18 @@ constexpr u32 DOLPHIN_WEB_ENABLE_FASTMEM_HOIST = 1u << 23;
+ // one freeze. Per-slice counter reset in CachedInterpreter::Run().
+ constexpr u32 COMPILE_THROTTLE_MAX_PER_SLICE = 8;
+ constexpr u32 COMPILE_THROTTLE_MAX_US_PER_SLICE = 5000;
++// §29a wall-clock compile budget. The per-slice cap above bounds a *slice*, but a
++// slice is a few hundred microseconds of emulated time, so 8 compiles (or 5 ms) per
++// slice still lets a cold title spend most of the wall clock compiling: a Wii menu
++// with ten thousand fresh blocks ran at 15-20% game speed for seconds at a stretch,
++// which then tripped the regression fuse, which turned the JIT off, which came back
++// 300 frames later into the same burst (the 20%/160% sawtooth). This is a token
++// bucket in wall time: compiles may take at most COMPILE_WALL_BUDGET_PERCENT of the
++// wall clock, measured over the bucket, so the burst stretches over a few seconds at
++// >= (100 - percent)% speed instead. Rejected blocks defer like the per-slice path
++// (interpreted now, retried next slice).
++constexpr u32 COMPILE_WALL_BUDGET_PERCENT = 25;
++constexpr s64 COMPILE_WALL_BUDGET_CAP_US = 20000;   // the most that can be banked (one burst of ~20 ms)
+ 
+ inline bool DolphinWebHelperDisabled(u32 bit)
+ {
+@@ -376,6 +389,15 @@ std::atomic<u32> s_wasm_cache_miss_count{0};
+ // only from the CPU pthread (TryWriteWasmBlock, Record*, Run()).
+ u32 s_wasm_compiles_this_slice = 0;
+ u32 s_wasm_compile_us_this_slice = 0;
++// §29a wall-clock budget state. Written on the CPU pthread only; the balance and the
++// estimate are atomics (relaxed) because the stats string reads them from another
++// thread. The bucket starts full so boot's first compiles are not held back; it
++// refills at COMPILE_WALL_BUDGET_PERCENT of elapsed wall time and each compile's
++// measured cost is drawn from it.
++std::atomic<s64> s_wasm_compile_wall_budget_us{COMPILE_WALL_BUDGET_CAP_US};
++s64 s_wasm_compile_wall_budget_last_us = 0;
++std::atomic<u32> s_wasm_compile_wall_recent_us{1500};   // running estimate of one compile's cost
++std::atomic<u32> s_wasm_compile_wall_budget_reject_count{0};
+ // §28ce stats: cumulative throttle rejects, peak burst (max compiles
+ // observed in any one slice), peak compile-time burst (max us observed
+ // in any one slice). All atomic for cross-thread read by stats.
+@@ -419,6 +441,12 @@ extern "C" void DolphinWeb_RecordModuleUs(int dt_us)
+   // regardless of throttle enablement — only the reject path is gated.
+   s_wasm_compiles_this_slice++;
+   s_wasm_compile_us_this_slice += dt;
++  // §29a: draw the compile's cost from the wall-clock bucket and keep a cheap
++  // estimate of the next one (an exponential average, 1/4 weight).
++  s_wasm_compile_wall_budget_us.fetch_sub(static_cast<s64>(dt), std::memory_order_relaxed);
++  s_wasm_compile_wall_recent_us.store(
++      (s_wasm_compile_wall_recent_us.load(std::memory_order_relaxed) * 3 + dt) / 4,
++      std::memory_order_relaxed);
+ }
+ extern "C" void DolphinWeb_RecordInstanceUs(int dt_us)
+ {
+@@ -10688,6 +10716,32 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
+       return false;
+     }
+   }
++  // §29a wall-clock compile budget (see the constants): refill the bucket for the
++  // wall time since the last look, then only compile if it can pay for a compile of
++  // about the recent size. One clock read per compile attempt, not per block run.
++  if (!DolphinWebHelperDisabled(DOLPHIN_WEB_DISABLE_COMPILE_WALL_BUDGET))
++  {
++    const s64 now_us = static_cast<s64>(
++        std::chrono::duration_cast<std::chrono::microseconds>(
++            std::chrono::steady_clock::now().time_since_epoch())
++            .count());
++    s64 balance = s_wasm_compile_wall_budget_us.load(std::memory_order_relaxed);
++    if (s_wasm_compile_wall_budget_last_us != 0 && now_us > s_wasm_compile_wall_budget_last_us)
++    {
++      balance += (now_us - s_wasm_compile_wall_budget_last_us) * COMPILE_WALL_BUDGET_PERCENT / 100;
++      if (balance > COMPILE_WALL_BUDGET_CAP_US)
++        balance = COMPILE_WALL_BUDGET_CAP_US;
++      s_wasm_compile_wall_budget_us.store(balance, std::memory_order_relaxed);
++    }
++    s_wasm_compile_wall_budget_last_us = now_us;
++    if (balance < static_cast<s64>(s_wasm_compile_wall_recent_us.load(std::memory_order_relaxed)))
++    {
++      s_wasm_compile_wall_budget_reject_count.fetch_add(1, std::memory_order_relaxed);
++      s_deferred_wasm_queues[this].Defer(js.blockStart,
++          static_cast<u32>(m_ppc_state.feature_flags), js.curBlock->normalEntry);
++      return false;
++    }
++  }
+   // §28ca: lever-gated min-prefix. Default 4. When bit 21 is CLEARED
+   // (?shortprefix=1), drop to 2 so short blocks that currently fall to
+   // Interpret<false> (54% of attempts in the §28bz audit) compile instead.
+@@ -11491,6 +11545,12 @@ extern "C" const char* GetPpcWasmHelperStats()
+   out << "smearcompile:rej" << throttle_rejects
+       << "/maxN" << burst_max
+       << "/maxUs" << burst_us_max << " ";
++  // §29a wall-clock budget: deferrals it caused, the bucket's balance, the running
++  // per-compile cost estimate it holds compiles against.
++  out << "wallbudget:rej"
++      << s_wasm_compile_wall_budget_reject_count.load(std::memory_order_relaxed)
++      << "/bal" << s_wasm_compile_wall_budget_us.load(std::memory_order_relaxed)
++      << "/est" << s_wasm_compile_wall_recent_us.load(std::memory_order_relaxed) << " ";
+   // §28cn per-slice CPU pthread profiler. maxUs = worst single CoreTiming
+   // slice — if >16000 we blew a frame at 60Hz. runOnlyMaxUs = same but
+   // excluding compile time, so we know whether the spike was compile

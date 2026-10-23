@@ -934,6 +934,7 @@ async function handleMessage(type, payload) {
         softwareTevHotCaseMode: payload.softwareTevHotCaseMode,
         xfbFastPaths: payload.xfbFastPaths,
         correctTimeDrift: payload.correctTimeDrift,
+        fastDiscSpeed: payload.fastDiscSpeed,
         coreLog: payload.coreLog,
         efbDiag: payload.efbDiag,
         jitVerbose: payload.jitVerbose,
@@ -1459,6 +1460,7 @@ async function loadCore({
   softwareTevHotCaseMode: requestedSoftwareTevHotCaseMode = 0,
   xfbFastPaths = 0,
   correctTimeDrift = false,
+  fastDiscSpeed = true,
   coreLog = false,
   efbDiag = false,
   jitVerbose = false,
@@ -1921,6 +1923,8 @@ async function loadCore({
     // Read by dolphin_web_core.cpp at CoreInit. Both are opt-in and default
     // false, so the shipping page load is unchanged.
     dolphinCorrectTimeDrift: Boolean(correctTimeDrift),
+    // §29b: false asks for real drive timing (?fastdisc=0); default keeps the fast reads.
+    dolphinFastDiscSpeed: fastDiscSpeed !== false,
     dolphinCoreLog: Boolean(coreLog),
     // Ranks the instructions that block JIT compilation (?jitverbose=1).
     dolphinWebVerbosePpcJit: Boolean(jitVerbose),

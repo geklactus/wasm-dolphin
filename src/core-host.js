@@ -101,6 +101,7 @@ export class EmulatorHost {
     this.softwareTevHotCaseMode = requestedSoftwareTevHotCaseMode(window.location.search);
     this.xfbFastPaths = requestedXfbFastPaths(window.location.search);
     this.correctTimeDrift = requestedCorrectTimeDrift();
+    this.fastDiscSpeed = requestedFastDiscSpeed();
     this.coreLog = requestedCoreLog();
     this.efbDiag = requestedEfbDiag();
     this.jitVerbose = new URLSearchParams(window.location.search).get("jitverbose") === "1";
@@ -385,6 +386,7 @@ export class EmulatorHost {
             softwareTevHotCaseMode: this.softwareTevHotCaseMode,
             xfbFastPaths: this.xfbFastPaths,
             correctTimeDrift: this.correctTimeDrift,
+            fastDiscSpeed: this.fastDiscSpeed,
             coreLog: this.coreLog,
             efbDiag: this.efbDiag,
             jitVerbose: this.jitVerbose,
@@ -1379,6 +1381,16 @@ function requestedEfbDiag() {
   return raw === "2" ? 2 : (raw === "1" ? 1 : false);
 }
 
+// §29b disc timing. Dolphin's "speed up disc transfer rate" has been on since the
+// first harness runs (a local File answers at memory speed, so why wait). A disc read
+// over HTTP does not: with instant emulated reads every fetch the reader has to wait
+// for is a stall of the whole core, while real-drive timing gives the fetch the
+// seek+transfer time the game already expects. ?fastdisc=0 asks for the real timing;
+// the default keeps today's behaviour.
+function requestedFastDiscSpeed() {
+  return new URLSearchParams(window.location.search).get("fastdisc") !== "0";
+}
+
 function requestedCorrectTimeDrift() {
   return new URLSearchParams(window.location.search).get("timedrift") === "1";
 }
@@ -1410,6 +1422,7 @@ const CACHED_INTERPRETER_DISABLE_BITS = {
   shortprefix:     1 << 21, // §28ca lower JIT min-prefix 4→2 (default-off; ?shortprefix=1 to enable)
   smearcompile:    1 << 22, // §28ce cap JIT compiles/slice (default-off; ?smearcompile=1 to enable)
   fastmemhoist:    1 << 23, // §28cz per-block fastmem bounds-check hoist (ENABLE polarity; default-off; ?fastmemhoist=1)
+  compilebudget:   1 << 24, // §29a wall-clock JIT compile budget (default-on; ?compilebudget=0 to disable)
   // Aliases the plan / TL;DR uses interchangeably:
   fastinputpoll: 1 << 1, // legacy synonym for meleecall (input-poll lives there)
   fastmem:       1 << 7, // legacy synonym for fastsystem (load/store-ish helpers)
@@ -1510,6 +1523,14 @@ function requestedCachedInterpreterDisableMask() {
   // unchecked OOB WASM load) — kept off until A/B + correctness verified.
   if (params.get("fastmemhoist") === "1") {
     mask |= CACHED_INTERPRETER_DISABLE_BITS.fastmemhoist;
+  }
+  // §29a wall-clock compile budget: DEFAULT-ON. The per-slice smear (§28ce) bounds a
+  // slice, not the wall clock, so a cold Wii title still spent most of its first
+  // minutes compiling (15-20% game speed in bursts, which tripped the regression
+  // fuse, which cycled the JIT: the 20%/160% sawtooth). The budget holds compiles
+  // to a quarter of wall time. Escape hatch, no rebuild: ?compilebudget=0.
+  if (params.get("compilebudget") === "0") {
+    mask |= CACHED_INTERPRETER_DISABLE_BITS.compilebudget;
   }
   return mask >>> 0;
 }
