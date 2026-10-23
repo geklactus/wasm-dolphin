@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:33 +0000
+Subject: [PATCH] 0033-webgpu-producer-phase-profile
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 0a2d06b..ca25334 100644
+index c24784da1f..9e2570649d 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,7 +18,7 @@ index 0a2d06b..ca25334 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index 6c735b5..7ef59b1 100644
+index 6c735b5807..7ef59b143f 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 @@ -12,6 +12,8 @@
@@ -72,7 +78,7 @@ index 6c735b5..7ef59b1 100644
    std::memset(destination, 0, plan.packet_size);
    for (u32 index = 0; index < classes.size(); ++index)
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 9a9485c..63cab04 100644
+index 59783b99e2..f8e4c17f89 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -31,6 +31,7 @@
@@ -208,7 +214,7 @@ index 9a9485c..63cab04 100644
      PutBgU32(b, 0x57424731);
      PutBgU32(b, 2);
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-index 6d5d148..29735b1 100644
+index f0c661f42d..a7beac4ab5 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 @@ -14,6 +14,7 @@
@@ -229,7 +235,7 @@ index 6d5d148..29735b1 100644
    *out_base_index = 0;
  
 diff --git a/Source/Core/VideoCommon/Fifo.cpp b/Source/Core/VideoCommon/Fifo.cpp
-index 6d032c9..41a5b4d 100644
+index 0e35e73c3c..d0b5aab490 100644
 --- a/Source/Core/VideoCommon/Fifo.cpp
 +++ b/Source/Core/VideoCommon/Fifo.cpp
 @@ -31,6 +31,7 @@
@@ -240,7 +246,7 @@ index 6d032c9..41a5b4d 100644
  
  #ifdef __EMSCRIPTEN__
  #include <emscripten/emscripten.h>
-@@ -403,8 +404,12 @@ void FifoManager::RunGpuLoop()
+@@ -410,8 +411,12 @@ void FifoManager::RunGpuLoop()
                         distance);
  
              u8* write_ptr = m_video_buffer_write_ptr;
@@ -255,7 +261,7 @@ index 6d032c9..41a5b4d 100644
  
  #ifdef __EMSCRIPTEN__
              // §27d: does the GPU thread actually DECODE FIFO chunks
-@@ -467,8 +472,12 @@ void FifoManager::RunGpuLoop()
+@@ -474,8 +479,12 @@ void FifoManager::RunGpuLoop()
  
            // The fifo is empty and it's unlikely we will get any more work in the near future.
            // Make sure VertexManager finishes drawing any primitives it has stored in it's buffer.
@@ -270,7 +276,7 @@ index 6d032c9..41a5b4d 100644
          }
        },
        100);
-@@ -554,8 +563,12 @@ int FifoManager::RunGpuOnCpu(int ticks)
+@@ -561,8 +570,12 @@ int FifoManager::RunGpuOnCpu(int ticks)
        }
        ReadDataFromFifo(fifo.CPReadPointer.load(std::memory_order_relaxed));
        u32 cycles = 0;
@@ -287,7 +293,7 @@ index 6d032c9..41a5b4d 100644
  
 diff --git a/Source/Core/VideoCommon/WasmWebGpuProducerProfile.h b/Source/Core/VideoCommon/WasmWebGpuProducerProfile.h
 new file mode 100644
-index 0000000..83ac1e3
+index 0000000000..e6a7e80cb9
 --- /dev/null
 +++ b/Source/Core/VideoCommon/WasmWebGpuProducerProfile.h
 @@ -0,0 +1,126 @@

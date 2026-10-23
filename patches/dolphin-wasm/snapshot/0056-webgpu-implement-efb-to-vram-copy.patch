@@ -1,4 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:13 +0000
+Subject: [PATCH] 0056-webgpu-implement-efb-to-vram-copy
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/TextureCache.h b/Source/Core/VideoBackends/WebGPU/TextureCache.h
+index f5e3b87cc4..636b5ff35d 100644
 --- a/Source/Core/VideoBackends/WebGPU/TextureCache.h
 +++ b/Source/Core/VideoBackends/WebGPU/TextureCache.h
 @@ -7,9 +7,19 @@
@@ -24,7 +31,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/TextureCache.h b/Source/Core/Video
  class TextureCache final : public TextureCacheBase
  {
  protected:
-@@ -21,15 +31,6 @@
+@@ -21,15 +31,6 @@ protected:
                 const std::array<u32, 3>& /* filter_coefficients */) override
    {
    }

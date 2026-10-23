@@ -1,7 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:14 +0000
+Subject: [PATCH] 0062-webgpu-per-texture-samplers
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index ce87a24a8b..6ac8f005cf 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -590,8 +590,19 @@
+@@ -600,8 +600,19 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
  // (clears, copies, draws) with native wgpu operations until SW drops
  // out of the chain entirely.
  
@@ -21,7 +28,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    UpdateActiveConfig();
  }
  
-@@ -2038,8 +2049,6 @@
+@@ -2043,8 +2054,6 @@ bool WebGPUGfx::PrepareDrawResources()
    RecordUboPacketOpportunity(ubo_change_mask, ubo_payload_sizes);
    uniform_profile.Pause();
  
@@ -30,7 +37,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    // Bind group 0 — the uniform ring at all 4 UBO bindings (b0 PS /
    // utility PSBlock, b1 VS, b2 custom→reuse PS, b3 GS). Built ONCE: the
    // per-draw constants live at per-draw *dynamic offsets* into the ring
-@@ -2108,7 +2117,7 @@
+@@ -2113,7 +2122,7 @@ bool WebGPUGfx::PrepareDrawResources()
        return false;
    }
  
@@ -39,7 +46,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    // only when the bound texture/sampler set OR the render target
    // changes. A sampler slot that references the *current* render
    // target (EFB feedback) is a WebGPU read-while-write hazard
-@@ -2126,16 +2135,38 @@
+@@ -2131,16 +2140,38 @@ bool WebGPUGfx::PrepareDrawResources()
    u32 sig = 0;
    Bg1Slot* slot = nullptr;
    u32 bg1_id = 0;
@@ -83,7 +90,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    }
    {
    DolphinWeb::WebGpuDrawProfile::ScopedSample draw_profile(
-@@ -2147,25 +2178,30 @@
+@@ -2152,25 +2183,30 @@ bool WebGPUGfx::PrepareDrawResources()
      std::vector<u8> b;
      PutBgU32(b, 0x57424731);
      PutBgU32(b, 1);
@@ -95,6 +102,14 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
        PutBgU32(b, 1);
 -      PutBgU32(b, resolve_tex(i));
 +      PutBgU32(b, texture_ids[i]);
++      PutBgU32(b, 0);
++      PutBgU32(b, 0);
++    }
++    for (u32 i = 0; i < 8; i++)
++    {
++      PutBgU32(b, 8 + i);
++      PutBgU32(b, 2);
++      PutBgU32(b, m_sampler_ids[i]);
        PutBgU32(b, 0);
        PutBgU32(b, 0);
      }
@@ -103,14 +118,6 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
 -    PutBgU32(b, m_sampler_id);
 -    PutBgU32(b, 0);
 -    PutBgU32(b, 0);
-+    for (u32 i = 0; i < 8; i++)
-+    {
-+      PutBgU32(b, 8 + i);
-+      PutBgU32(b, 2);
-+      PutBgU32(b, m_sampler_ids[i]);
-+      PutBgU32(b, 0);
-+      PutBgU32(b, 0);
-+    }
      const u32 id = m_cmd_stream.PushCreateBindGroup(b.data(), b.size(), 1);
      if (id)
      {
@@ -121,16 +128,15 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
        bg1_id = id;
      }
    }
-@@ -2267,10 +2303,15 @@
+@@ -2272,10 +2308,15 @@ void WebGPUGfx::SetTexture(u32 index, const AbstractTexture* texture)
    m_tex_id[index] = texture ? static_cast<const WebGPUTexture*>(texture)->GetBridgeId() : 0;
  }
  
 -void WebGPUGfx::SetSamplerState(u32 /* index */, const SamplerState& /* state */)
--{
++void WebGPUGfx::SetSamplerState(u32 index, const SamplerState& state)
+ {
 -  // Day-30 split uses one shared sampler; per-index sampler state is a
 -  // post-cutover refinement.
-+void WebGPUGfx::SetSamplerState(u32 index, const SamplerState& state)
-+{
 +  if (index >= m_sampler_states.size())
 +    return;
 +  const u32 packed = PackSamplerState(state);
@@ -142,6 +148,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
  
  u32 WebGPUGfx::RefreshUboControlMode()
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
+index 442fa63f66..f2bf775b1e 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -4,6 +4,7 @@
@@ -152,7 +159,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBac
  #include <vector>
  
  #include "Common/CommonTypes.h"
-@@ -222,8 +223,9 @@
+@@ -222,8 +223,9 @@ private:
    u32 m_scissor[4] = {0, 0, 640, 480};
  
    u32 m_tex_id[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -164,7 +171,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBac
  
    u32 m_ssbo_bbox = 0;
    u32 m_dummy_tex = 0;
-@@ -306,12 +308,12 @@
+@@ -306,12 +308,12 @@ private:
    // Cached bind-group ids. group0 (UBOs) + group2 (ssbo) reference
    // fixed buffers — created once, reused every draw (UBO *contents*
    // change via writeBuffer; the GPUBindGroup stays valid). group1
@@ -180,7 +187,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBac
    // slot (the old m_bg1_sig/id) re-emitted CREATE_BIND_GROUP whenever
    // consecutive draws used different texture sets — and Melee cycles
    // through many per frame, so the ring overflowed (records DROPPED →
-@@ -325,6 +327,8 @@
+@@ -325,6 +327,8 @@ private:
    {
      u32 sig = 0;
      u32 id = 0;  // 0 = empty (resource ids start at 1)
@@ -190,9 +197,10 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBac
    Bg1Slot m_bg1_cache[kBg1CacheSize] = {};
  };
 diff --git a/Source/Core/VideoCommon/PixelShaderGen.cpp b/Source/Core/VideoCommon/PixelShaderGen.cpp
+index 3cc17fa0d6..18dd8d57bd 100644
 --- a/Source/Core/VideoCommon/PixelShaderGen.cpp
 +++ b/Source/Core/VideoCommon/PixelShaderGen.cpp
-@@ -379,12 +379,14 @@
+@@ -379,12 +379,14 @@ void WritePixelShaderCommonHeader(ShaderCode& out, APIType api_type,
    if (api_type == APIType::Vulkan)
    {
      for (u32 i = 0; i < 8; i++)

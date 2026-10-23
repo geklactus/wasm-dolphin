@@ -1,4 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:13 +0000
+Subject: [PATCH] 0061-webgpu-renderer-feature-mask
+
+
+diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
+index ccc42e182c..b4ba1e46e5 100644
+--- a/Source/Core/Core/CMakeLists.txt
++++ b/Source/Core/Core/CMakeLists.txt
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+     "-sSTACK_SIZE=5242880"
+     "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
+     "-sPTHREAD_POOL_SIZE=16"
+-    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuOwnershipTraceEnabled','_AcknowledgeWebGpuOwnershipTraceCapture','_GetWebGpuOwnershipTracePtr','_GetWebGpuOwnershipTraceCapacity','_SetWebGpuProducerProfileEnabled','_SetWebGpuDrawProfileEnabled','_SetWgpuDeepDiagnosticsEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
++    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_SetRendererFeatureMask','_GetRendererFeatureMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuOwnershipTraceEnabled','_AcknowledgeWebGpuOwnershipTraceCapture','_GetWebGpuOwnershipTracePtr','_GetWebGpuOwnershipTraceCapacity','_SetWebGpuProducerProfileEnabled','_SetWebGpuDrawProfileEnabled','_SetWgpuDeepDiagnosticsEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
+     # WORKERFS and NODEFS are named here so they survive dead-code
+     # elimination. -lworkerfs.js / -lnodefs.js above only make the JS
+     # libraries available to the link; current Emscripten still drops a JS
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index b6fbff6e37..ce87a24a8b 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -40,12 +40,32 @@
@@ -9,8 +29,6 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
 -// polarity, not disable. Default off: enabled, it blanks the frame outright
 -// (9,048 clears executed, 0.0 visual fps, black output on Mario Kart Wii).
 -extern "C" unsigned int DolphinWeb_GetCachedInterpreterDisableMask();
--
--static constexpr unsigned int DOLPHIN_WEB_ENABLE_CLEARRECT = 1u << 24;
 +// Renderer feature mask. ENABLE polarity, and DEFAULT ON: the renderer is
 +// correct out of the box even if the host never calls the setter. This used to
 +// ride on the cached-interpreter *disable* mask, which was doubly confusing --
@@ -26,7 +44,8 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
 +
 +static std::atomic<unsigned int> s_dolphin_web_renderer_feature_mask{
 +    DOLPHIN_WEB_RENDERER_FEATURE_DEFAULT};
-+
+ 
+-static constexpr unsigned int DOLPHIN_WEB_ENABLE_CLEARRECT = 1u << 24;
 +// Returns the previous mask, so a caller can diff or restore it.
 +extern "C" unsigned int DolphinWeb_SetRendererFeatureMask(unsigned int mask)
 +{
@@ -40,7 +59,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
  #include <array>
  #include <set>
  #include <atomic>
-@@ -1248,7 +1268,7 @@
+@@ -1248,7 +1268,7 @@ void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& target_rc, bool colo
  
    const u32 efb_w = g_framebuffer_manager ? g_framebuffer_manager->GetEFBWidth() : 0;
    const u32 efb_h = g_framebuffer_manager ? g_framebuffer_manager->GetEFBHeight() : 0;
@@ -49,7 +68,7 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    const bool covers_efb = target_rc.left <= 0 && target_rc.top <= 0 &&
                            static_cast<u32>(std::max(0, target_rc.GetWidth())) >= efb_w &&
                            static_cast<u32>(std::max(0, target_rc.GetHeight())) >= efb_h;
-@@ -1329,15 +1349,18 @@
+@@ -1329,15 +1349,18 @@ void WebGPUGfx::ClearRegion(const MathUtil::Rectangle<int>& target_rc, bool colo
    // with no pass open, so that guard made every clear fall through to the
    // legacy over-clear and the opcode never executed once -- a silent no-op
    // that looked exactly like "the fix did not help".
@@ -76,15 +95,3 @@ diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoB
    {
      const u32 rgba = (static_cast<u32>((color >> 16) & 0xff) << 24) |
                       (static_cast<u32>((color >> 8) & 0xff) << 16) |
-diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
---- a/Source/Core/Core/CMakeLists.txt
-+++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@
-     "-sSTACK_SIZE=5242880"
-     "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
-     "-sPTHREAD_POOL_SIZE=16"
--    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuOwnershipTraceEnabled','_AcknowledgeWebGpuOwnershipTraceCapture','_GetWebGpuOwnershipTracePtr','_GetWebGpuOwnershipTraceCapacity','_SetWebGpuProducerProfileEnabled','_SetWebGpuDrawProfileEnabled','_SetWgpuDeepDiagnosticsEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
-+    "-sEXPORTED_FUNCTIONS=['_CoreInit','_SetVideoBackend','_SetCpuThread','_SetCpuCore','_SetCpuOverclock','_SetEmulationSpeed','_SetPresentationScale','_SetFastSoftwareRaster','_SetSoftwareTevHotCaseMode','_SetPpcWasmJitEnabled','_SetPpcProfileEnabled','_SetCachedInterpreterDisableMask','_GetCachedInterpreterDisableMask','_SetRendererFeatureMask','_GetRendererFeatureMask','_GetFrameRingEntryPtr','_GetFrameRingCapacity','_GetFrameRingEntrySize','_GetFrameRingHead','_GetPpcProfileStats','_BootDisc','_StopCore','_SetCorePaused','_ResetCore','_SaveCoreState','_LoadCoreState','_LoadStateFile','_SaveStateFile','_PumpHostJobs','_GetCoreState','_GetCoreStateName','_GetCoreStatus','_GetCoreTitle','_GetCoreTicksLow','_GetCoreTicksHigh','_GetCoreTicksPerSecond','_GetPPCPC','_GetLastLoadedCoreTicksLow','_GetLastLoadedCoreTicksHigh','_GetLastLoadedPPCPC','_GetLastLoadedCheckpointGeneration','_GetCPUCoreName','_AudioSampleRate','_AudioChannels','_AudioBufferFrames','_AudioBuffer','_MixAudio','_SetAudioMuted','_GetAudioStats','_GetPpcWasmBlockCompileCount','_GetPpcWasmBlockRunCount','_GetPpcWasmHelperStats','_SetWebGpuStateCacheEnabled','_SetWebGpuUboCacheEnabled','_SetWebGpuUboPackEnabled','_SetWebGpuGeometryPackEnabled','_SetWebGpuGeometryRangeEnabled','_SetWebGpuUploadArenaMiB','_SetWebGpuOwnershipTraceEnabled','_AcknowledgeWebGpuOwnershipTraceCapture','_GetWebGpuOwnershipTracePtr','_GetWebGpuOwnershipTraceCapacity','_SetWebGpuProducerProfileEnabled','_SetWebGpuDrawProfileEnabled','_SetWgpuDeepDiagnosticsEnabled','_SetWgpuIdleFifoTailElisionEnabled','_RunWebGpuDenseUboPacketSmoke','_RunWebGpuDenseUboRollbackSmoke','_GetWebGpuDenseUboSmokeError','_GetWebGpuStateCacheStats','_DolphinWeb_RecordModuleUs','_DolphinWeb_RecordInstanceUs','_DolphinWeb_RecordCacheHit','_DolphinWeb_RecordCacheMiss','_TestPpcWasmDirectCandidate','_TestDcbxLoopPattern','_TestPpcWasmDirectCandidateCompiles','_RunPpcWasmMultipleWordMemorySmoke','_RunPpcWasmSinglePrecisionArithmeticSmoke','_RunPpcWasmDoublePrecisionArithmeticSmoke','_RunPpcWasmPairedQuantizedMemorySmoke','_RunPpcWasmFloatCompareSmoke','_GetVideoStats','_RunWasmJitSmoke','_RunPpcWasmAddiSmoke','_RunPpcWasmStateAddiSmoke','_RunPpcWasmDolphinStateAddiSmoke','_RunPpcWasmIntegerBlockSmoke','_MountDisc','_Reset','_SetInputMask','_SetInputState','_RunFrame','_FrameWidth','_FrameHeight','_FrameBuffer','_SaveState','_LoadState','_GetFrame','_GetFrameSignalPtr','_GetGameId','_GetGameTitle','_GetMakerId','_GetPlatform','_GetRegion','_GetDiscNumber','_GetApploaderDate','_GetApploaderSize','_GetBootDolOffset','_GetBootDolSize','_GetFstOffset','_GetFstSize','_GetRawSize','_GetDataSize','_GetRootEntryCount','_GetRootEntryName','_GetRootEntryPath','_GetRootEntryIsDirectory','_GetRootEntryOffset','_GetRootEntrySize','_ReadDisc','_ReadDiscFile','_malloc','_free']"
-     # WORKERFS and NODEFS are named here so they survive dead-code
-     # elimination. -lworkerfs.js / -lnodefs.js above only make the JS
-     # libraries available to the link; current Emscripten still drops a JS

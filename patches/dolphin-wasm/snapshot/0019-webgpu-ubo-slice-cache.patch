@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:31 +0000
+Subject: [PATCH] 0019-webgpu-ubo-slice-cache
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 9f9cd3e387..16f76439c7 100644
+index 1697940d42..bcb9a11857 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,7 +18,7 @@ index 9f9cd3e387..16f76439c7 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 4217c0f30b..ced9eeb3d3 100644
+index 5048fa065d..4ca4b0402d 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -53,6 +53,14 @@ std::atomic<u64> s_pipeline_records_suppressed{0};
@@ -352,7 +358,7 @@ index 4217c0f30b..ced9eeb3d3 100644
    if (off == kUboOffNone)
      return;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index fee5324d6f..0329a08e8a 100644
+index 4be72fefa6..ab78958197 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -180,7 +180,22 @@ private:

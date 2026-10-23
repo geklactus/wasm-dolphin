@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:31 +0000
+Subject: [PATCH] 0015-webgpu-pass-transactions
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 index 56becfe779..1ff313d4be 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
@@ -725,7 +731,7 @@ index 2017de67ab..b22bb476d5 100644
    // implies class on the consumer. Starts at 1 (0 = none/sentinel).
    u32 m_next_id = 1;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 6a536c6b52..4217c0f30b 100644
+index 79b5cab11a..5048fa065d 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -74,7 +74,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()
@@ -959,7 +965,7 @@ index 6a536c6b52..4217c0f30b 100644
    m_util_uniform_mode = false;
  }
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 06dba16fcf..fee5324d6f 100644
+index a43d751552..4be72fefa6 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -161,8 +161,9 @@ private:

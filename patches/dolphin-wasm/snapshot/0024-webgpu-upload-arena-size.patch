@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0024-webgpu-upload-arena-size
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 17ae306..55520dc 100644
+index f6d486de77..7db0b34648 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,17 +18,16 @@ index 17ae306..55520dc 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index ee23c1d..40170e5 100644
+index f2a5a9f877..49c5ca15fe 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-@@ -46,8 +46,25 @@ static constexpr u32 kRingCapacity = 262144;
+@@ -46,9 +46,26 @@ static constexpr u32 kRingCapacity = 262144;
  // consumer (1-2 frames behind) ~tens of frames of recycle headroom
  // before the bump pointer wraps back over a region it might still be
  // reading. Mirrors the Day-20 XFB-ring idea (no per-frame malloc).
 -static constexpr u32 kUploadArenaBytes = 32u * 1024u * 1024u;
--static constexpr u32 kProtocolUploadWatermark = 1u << 0;
-+static constexpr u32 kProtocolUploadWatermark = 1u << 0;
-+
+ static constexpr u32 kProtocolUploadWatermark = 1u << 0;
+ 
 +bool WebGPUCommandStream::ConfigureUploadArenaMiB(u32 mib, bool metrics_enabled)
 +{
 +  const u32 requested = mib == 64 ? kLargeUploadArenaBytes : kDefaultUploadArenaBytes;
@@ -40,16 +45,16 @@ index ee23c1d..40170e5 100644
 +  m_upload_metrics_enabled.store(metrics_enabled, std::memory_order_relaxed);
 +  return true;
 +}
- 
++
  void WebGPUCommandStream::EnsureRing()
  {
+   if (m_header)
 @@ -72,9 +89,21 @@ void WebGPUCommandStream::EnsureRing()
    // Per-frame upload arena (DESIGN §payload). Allocated once, never
    // freed; the producer bump-allocates into it and the consumer
    // reads straight from the shared heap (zero-copy).
 -  m_upload_base = static_cast<u8*>(std::malloc(kUploadArenaBytes));
 -  m_upload_size = m_upload_base ? kUploadArenaBytes : 0;
--  m_upload_write = 0;
 +  // Freeze configuration before reading it so a concurrent late setter can
 +  // never relabel an already-started allocation.
 +  m_upload_allocation_finalized.store(true, std::memory_order_release);
@@ -63,42 +68,28 @@ index ee23c1d..40170e5 100644
 +    m_upload_base = static_cast<u8*>(std::malloc(kDefaultUploadArenaBytes));
 +    m_upload_size = m_upload_base ? kDefaultUploadArenaBytes : 0;
 +  }
-+  m_upload_write = 0;
+   m_upload_write = 0;
 +  m_upload_configured_bytes.store(m_upload_size, std::memory_order_release);
  
    // Hand the ring + upload arena to the discio worker. The wasm heap
    // is a SharedArrayBuffer (USE_PTHREADS), so passing pointers is
-@@ -319,13 +348,15 @@ u32 WebGPUCommandStream::ReserveUpload(size_t len, u32 align)
-   // Convert the monotonic write position to a contiguous physical span.
-   // Padding at the end is part of the reserved byte range so the consumer
-   // watermark accounts for every wrap.
--  const u32 offset = m_upload_write % m_upload_size;
--  u32 aligned_offset = (offset + (align - 1)) & ~(align - 1);
--  u32 padding = aligned_offset - offset;
--  if (aligned_offset + len > m_upload_size)
--  {
--    padding += m_upload_size - aligned_offset;
--    aligned_offset = 0;
-+  const u32 offset = m_upload_write % m_upload_size;
-+  u32 aligned_offset = (offset + (align - 1)) & ~(align - 1);
-+  u32 padding = aligned_offset - offset;
+@@ -322,10 +351,12 @@ u32 WebGPUCommandStream::ReserveUpload(size_t len, u32 align)
+   const u32 offset = m_upload_write % m_upload_size;
+   u32 aligned_offset = (offset + (align - 1)) & ~(align - 1);
+   u32 padding = aligned_offset - offset;
 +  bool wrapped = false;
-+  if (aligned_offset + len > m_upload_size)
-+  {
-+    padding += m_upload_size - aligned_offset;
-+    aligned_offset = 0;
+   if (aligned_offset + len > m_upload_size)
+   {
+     padding += m_upload_size - aligned_offset;
+     aligned_offset = 0;
 +    wrapped = true;
    }
    const u32 begin = m_upload_write + padding;
    const u32 end = begin + static_cast<u32>(len);
-@@ -398,8 +429,22 @@ u32 WebGPUCommandStream::ReserveUpload(size_t len, u32 align)
-         return 0;
-       }
+@@ -400,6 +431,20 @@ u32 WebGPUCommandStream::ReserveUpload(size_t len, u32 align)
      }
--  }
--
-+  }
-+
+   }
+ 
 +  if (wrapped)
 +    m_upload_wrap_count.fetch_add(1, std::memory_order_relaxed);
 +  if (m_upload_metrics_enabled.load(std::memory_order_relaxed))
@@ -117,24 +108,22 @@ index ee23c1d..40170e5 100644
    m_last_upload_write_after = end;
    m_last_upload_ptr =
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-index 36ad2a0..0398c26 100644
+index 4ffe7c21a5..f9dba06ff1 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-@@ -203,7 +203,13 @@ public:
-   // per-frame upload arena in wasm memory, and hands their pointers
-   // to the discio worker via postMessage (same zero-copy pattern as
+@@ -205,6 +205,12 @@ public:
    // Day-19 ShowImage). Idempotent.
--  void EnsureRing();
-+  void EnsureRing();
-+
+   void EnsureRing();
+ 
 +  // Select the upload arena before EnsureRing allocates it. Only 64 MiB is
 +  // opt-in; every other value selects the 32 MiB default. Once the arena has
 +  // been handed to JS, same-value reapplication is a no-op and a different
 +  // request is rejected rather than invalidating the shared pointer.
 +  bool ConfigureUploadArenaMiB(u32 mib, bool metrics_enabled);
- 
++
    // Append one record. Drops the record (returns false) if the ring
    // is full — the consumer is behind; better to skip a frame's
+   // commands than block the video pthread.
 @@ -312,6 +318,34 @@ public:
    // Successful publication of SUBMIT_PRESENT is a FIFO reuse barrier: the
    // consumer submits all earlier encoded draws before replaying later uploads.
@@ -188,7 +177,7 @@ index 36ad2a0..0398c26 100644
    // BEGIN_PASS..END_PASS records stay private until END_PASS can publish the
    // entire batch. Resource creation/uploads remain immediate so the consumer
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 47aa305..9602665 100644
+index bb861a24be..efd3cf33cb 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -91,6 +91,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void SetWebGpuGeometryPackEnabled(int enabled)
@@ -218,4 +207,3 @@ index 47aa305..9602665 100644
    stats = out.str();
    return stats.c_str();
  }
-

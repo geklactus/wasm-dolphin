@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:30 +0000
+Subject: [PATCH] 0009-software-raster-phase-profile
+
+
 diff --git a/Source/Core/VideoBackends/Software/Rasterizer.cpp b/Source/Core/VideoBackends/Software/Rasterizer.cpp
 index ced6b9a242..32d864b0aa 100644
 --- a/Source/Core/VideoBackends/Software/Rasterizer.cpp
@@ -91,10 +97,10 @@ index 000dfc632b..befe33eb88 100644
    bool mipLinear = false;
  
 diff --git a/Source/Core/VideoCommon/CMakeLists.txt b/Source/Core/VideoCommon/CMakeLists.txt
-index 69a0968e4d..c7fbe232d0 100644
+index 6bbdcd9897..2f143d6a4c 100644
 --- a/Source/Core/VideoCommon/CMakeLists.txt
 +++ b/Source/Core/VideoCommon/CMakeLists.txt
-@@ -289,6 +289,10 @@ if(FFmpeg_FOUND)
+@@ -287,6 +287,10 @@ if(FFmpeg_FOUND)
    endif()
  endif()
  
@@ -131,7 +137,7 @@ index bfd2f036fa..3358214e8e 100644
    m_system.GetFifo().RunGpu();
  
 diff --git a/Source/Core/VideoCommon/Fifo.cpp b/Source/Core/VideoCommon/Fifo.cpp
-index 2d3f0c3a9d..dc982f46b9 100644
+index 790073a089..0e35e73c3c 100644
 --- a/Source/Core/VideoCommon/Fifo.cpp
 +++ b/Source/Core/VideoCommon/Fifo.cpp
 @@ -35,6 +35,7 @@
@@ -142,7 +148,7 @@ index 2d3f0c3a9d..dc982f46b9 100644
  #endif
  
  namespace Fifo
-@@ -420,7 +421,16 @@ void FifoManager::RunGpuLoop()
+@@ -427,7 +428,16 @@ void FifoManager::RunGpuLoop()
  #endif
  
              fifo.CPReadPointer.store(readPtr, std::memory_order_relaxed);
@@ -160,7 +166,7 @@ index 2d3f0c3a9d..dc982f46b9 100644
              if ((write_ptr - m_video_buffer_read_ptr) == 0)
              {
                fifo.SafeCPReadPointer.store(fifo.CPReadPointer.load(std::memory_order_relaxed),
-@@ -560,7 +570,15 @@ int FifoManager::RunGpuOnCpu(int ticks)
+@@ -567,7 +577,15 @@ int FifoManager::RunGpuOnCpu(int ticks)
        fifo.CPReadPointer.fetch_add(GPFifo::GATHER_PIPE_SIZE, std::memory_order_relaxed);
      }
  

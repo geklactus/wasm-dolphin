@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0036-webgpu-deep-diagnostic-gate
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index 3f1af48b01..487587b191 100644
+index 6342c7dd8d..e9e581e5cb 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,7 +18,7 @@ index 3f1af48b01..487587b191 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index a724559528..c86638118f 100644
+index 3c4d5abbeb..82a54e32d0 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -33,6 +33,7 @@
@@ -89,7 +95,7 @@ index a724559528..c86638118f 100644
      static u32 s_uu = 0;
      const u32 n = s_uu++;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
-index 29735b1ec1..19dadf4e44 100644
+index a7beac4ab5..7230c32092 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 @@ -15,6 +15,7 @@
@@ -131,7 +137,7 @@ index 3358214e8e..514be35358 100644
      static std::atomic<u32> s_hb{0};
      const u32 n = ++s_hb;
 diff --git a/Source/Core/VideoCommon/Fifo.cpp b/Source/Core/VideoCommon/Fifo.cpp
-index 142188966d..b44544f102 100644
+index 7e059c2f3d..1a43a74b6b 100644
 --- a/Source/Core/VideoCommon/Fifo.cpp
 +++ b/Source/Core/VideoCommon/Fifo.cpp
 @@ -32,6 +32,7 @@
@@ -142,7 +148,7 @@ index 142188966d..b44544f102 100644
  #include "VideoCommon/WasmWgpuIdleFifoTailGate.h"
  
  #ifdef __EMSCRIPTEN__
-@@ -311,6 +312,7 @@ void FifoManager::RunGpuLoop()
+@@ -318,6 +319,7 @@ void FifoManager::RunGpuLoop()
  #ifdef __EMSCRIPTEN__
          // §27 diag: is the GPU mainloop body running post-load, and
          // what FIFO/run state does it see? Rate-limited heartbeat.
@@ -150,7 +156,7 @@ index 142188966d..b44544f102 100644
          {
            static std::atomic<u32> s_hb{0};
            const u32 n = ++s_hb;
-@@ -356,6 +358,7 @@ void FifoManager::RunGpuLoop()
+@@ -363,6 +365,7 @@ void FifoManager::RunGpuLoop()
  #ifdef __EMSCRIPTEN__
            // §27 diag: which of the 4 drain gates blocks the GPU loop
            // post-load (CPU is filling the FIFO but GPU never drains)?
@@ -158,7 +164,7 @@ index 142188966d..b44544f102 100644
            {
              static std::atomic<u32> s_hb{0};
              const u32 n = ++s_hb;
-@@ -418,6 +421,7 @@ void FifoManager::RunGpuLoop()
+@@ -425,6 +428,7 @@ void FifoManager::RunGpuLoop()
              // frozen ⇒ the producer (WebGPUGfx) stops recording
              // post-load (backend re-init needed). If it never
              // increments ⇒ the GPU genuinely never drains (FIFO sync).
@@ -166,7 +172,7 @@ index 142188966d..b44544f102 100644
              {
                static std::atomic<u32> s_dec{0};
                const u32 d = ++s_dec;
-@@ -536,6 +540,7 @@ void FifoManager::RunGpu()
+@@ -543,6 +547,7 @@ void FifoManager::RunGpu()
  #ifdef __EMSCRIPTEN__
    // §27 diag: is the CPU still issuing GP bursts post-load (i.e. is
    // Wakeup being driven)? Rate-limited heartbeat.

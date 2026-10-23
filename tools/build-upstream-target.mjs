@@ -14,11 +14,11 @@ if (!existsSync(resolve(buildDir, "CMakeCache.txt"))) {
 }
 
 const toolchain = verifyWasmToolchain();
-const result = spawnSync(
-  toolchain.paths.cmake,
-  ["--build", buildDir, "--target", target, "--parallel", process.env.BUILD_PARALLELISM ?? "8"],
-  { encoding: "utf8", stdio: "inherit" }
-);
+// BUILD_KEEP_GOING=1 lets Ninja carry on past the first failing file (-k 0), so one run of a
+// build that is being fixed up reports every error rather than the first four.
+const buildArguments = ["--build", buildDir, "--target", target, "--parallel", process.env.BUILD_PARALLELISM ?? "8"];
+if (process.env.BUILD_KEEP_GOING === "1") buildArguments.push("--", "-k", "0");
+const result = spawnSync(toolchain.paths.cmake, buildArguments, { encoding: "utf8", stdio: "inherit" });
 
 if (result.error || result.status !== 0) {
   process.exit(result.status || 1);

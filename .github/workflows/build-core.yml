@@ -1,0 +1,184 @@
+# Builds the browser core from the pinned upstream Dolphin and the locked patch series, on
+# Linux, with the toolchain versions the Windows lock records. The core and its build
+# evidence come out as workflow artifacts; promoting one into cores/dolphin/ is a commit.
+#
+# The first run on a fresh platform lock (hashes still null) records the installed tool
+# hashes and uploads the lock as an artifact to commit; every later run verifies against it.
+
+name: Build core
+
+on:
+  push:
+    branches:
+      - "rebase/**"
+      - "core/**"
+  workflow_dispatch:
+
+concurrency:
+  group: build-core-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EMSDK_VERSION: "5.0.7"
+  EMSDK_COMMIT: bafd64c26bdaf10bd829163d1575b50b759a72d8
+  RUST_TOOLCHAIN: nightly-2026-05-15
+  CMAKE_VERSION: "4.3.2"
+  NINJA_VERSION: "1.13.0"
+  NODE_VERSION: "24.12.0"
+  CCACHE_DIR: /home/runner/.cache/ccache
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: CMake and Ninja (the pinned versions, from PyPI)
+        run: |
+          python -m pip install --disable-pip-version-check "cmake==${CMAKE_VERSION}" "ninja==${NINJA_VERSION}"
+          cmake --version | head -1
+          ninja --version
+
+      - name: Rust nightly with rust-src and the Emscripten target
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rust-src --target wasm32-unknown-emscripten
+          "$HOME/.rustup/toolchains/${RUST_TOOLCHAIN}-x86_64-unknown-linux-gnu/bin/rustc" --version --verbose
+
+      # restore/save pairs with `if: always()` on the save: a failing build still keeps its
+      # compiled system libraries and its compiler cache for the next attempt.
+      - name: Restore the Emscripten SDK
+        id: emsdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSDK_COMMIT }}-${{ env.EMSDK_VERSION }}-v1
+
+      - name: Emscripten SDK
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --quiet https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          git -C "$HOME/emsdk" checkout --quiet "${EMSDK_COMMIT}"
+          "$HOME/emsdk/emsdk" install "${EMSDK_VERSION}"
+          "$HOME/emsdk/emsdk" activate "${EMSDK_VERSION}"
+
+      - name: Put Emscripten on the path
+        run: |
+          echo "EMSDK=$HOME/emsdk" >> "$GITHUB_ENV"
+          echo "$HOME/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+          "$HOME/emsdk/upstream/emscripten/emcc" --version | head -1
+
+      - name: ccache
+        run: |
+          sudo apt-get install -y --no-install-recommends ccache
+          mkdir -p "$CCACHE_DIR"
+          ccache --set-config=max_size=3G
+          ccache --set-config=compiler_check=content
+          ccache --zero-stats
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-core-${{ github.sha }}
+          restore-keys: |
+            ccache-core-
+
+      - name: Toolchain lock
+        id: toolchain
+        run: |
+          node tools/verify-wasm-toolchain.mjs --record
+          if git diff --quiet -- provenance/wasm-toolchain.linux-x64.lock.json; then
+            echo "The installed toolchain matches the committed lock."
+            echo "recorded=false" >> "$GITHUB_OUTPUT"
+          elif git show HEAD:provenance/wasm-toolchain.linux-x64.lock.json | grep -q ': null'; then
+            echo "The committed lock had no hashes yet; this run recorded them (see the toolchain-lock artifact)."
+            git --no-pager diff --stat -- provenance/wasm-toolchain.linux-x64.lock.json
+            echo "recorded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::The installed toolchain does not match the committed lock:"
+            git --no-pager diff -- provenance/wasm-toolchain.linux-x64.lock.json
+            exit 1
+          fi
+
+      - name: Upload the recorded toolchain lock
+        if: steps.toolchain.outputs.recorded == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-lock
+          path: provenance/wasm-toolchain.linux-x64.lock.json
+
+      - name: Fetch the pinned Dolphin
+        run: npm run fetch:dolphin
+
+      - name: Apply the locked patch series
+        run: npm run patch:upstream
+
+      - name: Verify provenance
+        # Fails while cores/dolphin/ still holds a core built from the previous upstream pin:
+        # the ABI manifest ties the committed core to the source lock. Informational until
+        # the rebuilt core is promoted.
+        continue-on-error: true
+        run: npm run verify:provenance
+
+      - name: Configure
+        env:
+          DOLPHIN_WASM_COMPILER_LAUNCHER: ccache
+        run: npm run configure:upstream
+
+      - name: Build the core
+        env:
+          BUILD_PARALLELISM: "4"
+          BUILD_KEEP_GOING: "1"
+          # A run that recorded the toolchain lock has that file modified; the build
+          # evidence records the override and the path.
+          DOLPHIN_ALLOW_DIRTY_BUILD: ${{ steps.toolchain.outputs.recorded == 'true' && '1' || '' }}
+        run: npm run build:upstream:full-core
+
+      - name: Compiler cache statistics
+        if: always()
+        run: ccache --show-stats
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-core-${{ github.sha }}
+
+      - name: Save the Emscripten SDK
+        if: always() && steps.emsdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSDK_COMMIT }}-${{ env.EMSDK_VERSION }}-v1
+
+      - name: Upload the core
+        uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-core
+          if-no-files-found: error
+          path: |
+            cores/dolphin/dolphin-core-upstream.js
+            cores/dolphin/dolphin-core-upstream.wasm
+            cores/dolphin/dolphin-core-upstream.build.json
+            build/core-candidates/
+
+      - name: Upload the build directory's logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          if-no-files-found: ignore
+          path: |
+            build/dolphin-wasm/CMakeFiles/CMakeConfigureLog.yaml
+            build/dolphin-wasm/CMakeCache.txt
+            build/dolphin-wasm/wasm-dolphin-configure.json

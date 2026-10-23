@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:30 +0000
+Subject: [PATCH] 0012-software-raster-case-profile
+
+
 diff --git a/Source/Core/VideoBackends/Software/Tev.cpp b/Source/Core/VideoBackends/Software/Tev.cpp
-index 7cff266..d893baf 100644
+index 7cff2667bf..d893bafa89 100644
 --- a/Source/Core/VideoBackends/Software/Tev.cpp
 +++ b/Source/Core/VideoBackends/Software/Tev.cpp
 @@ -396,6 +396,78 @@ void Tev::Draw()
@@ -82,7 +88,7 @@ index 7cff266..d893baf 100644
    ASSERT(Position[0] >= 0 && Position[0] < s32(EFB_WIDTH));
    ASSERT(Position[1] >= 0 && Position[1] < s32(EFB_HEIGHT));
 diff --git a/Source/Core/VideoBackends/Software/TextureSampler.cpp b/Source/Core/VideoBackends/Software/TextureSampler.cpp
-index befe33e..fa8b32c 100644
+index befe33eb88..fa8b32c922 100644
 --- a/Source/Core/VideoBackends/Software/TextureSampler.cpp
 +++ b/Source/Core/VideoBackends/Software/TextureSampler.cpp
 @@ -23,6 +23,11 @@

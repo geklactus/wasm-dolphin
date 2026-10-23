@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:30 +0000
+Subject: [PATCH] 0008-xfb-safe-fastpaths
+
+
 diff --git a/Source/Core/VideoBackends/Software/CMakeLists.txt b/Source/Core/VideoBackends/Software/CMakeLists.txt
 index acf152da8b..bdfbf9e459 100644
 --- a/Source/Core/VideoBackends/Software/CMakeLists.txt
@@ -14,7 +20,7 @@ index acf152da8b..bdfbf9e459 100644
    # Add precompiled header
    target_link_libraries(videosoftware PRIVATE use_pch)
 diff --git a/Source/Core/VideoBackends/Software/SWEfbInterface.cpp b/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
-index 9f2fa0220b..ed7349c841 100644
+index b2c232ff40..91bd9ac125 100644
 --- a/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
 +++ b/Source/Core/VideoBackends/Software/SWEfbInterface.cpp
 @@ -3,6 +3,8 @@

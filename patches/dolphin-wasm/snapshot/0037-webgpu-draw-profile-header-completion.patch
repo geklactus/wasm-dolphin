@@ -1,9 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0037-webgpu-draw-profile-header-completion
+
+
 diff --git a/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h b/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h
-index c84d50e..dcb88b2 100644
+index c84d50ebce..dcb88b228a 100644
 --- a/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h
 +++ b/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h
-@@ -165,4 +165,38 @@ public:
-     while (previous_max < duration_ns &&
+@@ -166,3 +166,37 @@ public:
             !counters.sampled_max_ns.compare_exchange_weak(previous_max, duration_ns,
                                                            std::memory_order_relaxed))
      {

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { loadWasmToolchainLock, sha256File, sha256NormalizedTextFile } from "./wasm-toolchain.mjs";
+import { loadWasmToolchainLock, lockPath as toolchainLockPath, sha256File, sha256NormalizedTextFile } from "./wasm-toolchain.mjs";
 import {
   fileRecord,
   publicModuleExports,
@@ -130,7 +130,6 @@ export function writeCoreBuildInfo({ buildDir, outputPath = process.env.DOLPHIN_
 
   const sourceLockPath = resolve(root, "provenance/dolphin-source.lock.json");
   const vendorSnapshotPath = resolve(root, "provenance/dolphin-vendor-snapshot-v1.json");
-  const toolchainLockPath = resolve(root, "provenance/wasm-toolchain.lock.json");
   const cargoLockPath = resolve(root, "tools/naga-spirv-wgsl/Cargo.lock");
   const sourceLock = JSON.parse(readFileSync(sourceLockPath, "utf8"));
   const vendorSnapshot = JSON.parse(readFileSync(vendorSnapshotPath, "utf8"));
@@ -186,6 +185,7 @@ export function writeCoreBuildInfo({ buildDir, outputPath = process.env.DOLPHIN_
       localInputs
     },
     toolchain: {
+      lock: relative(root, toolchainLockPath).replace(/\\/g, "/"),
       lockSha256: sha256File(toolchainLockPath),
       emscriptenVersion: toolchain.emscripten.version,
       emscriptenCompilerCommit: toolchain.emscripten.compilerCommit,
@@ -207,6 +207,7 @@ export function writeCoreBuildInfo({ buildDir, outputPath = process.env.DOLPHIN_
       fallbackMapDiagnostics: configure.fallbackMapDiagnostics,
       fallbackMapBits: configure.fallbackMapBits,
       directWasmBlockDispatch: configure.directWasmBlockDispatch,
+      compilerLauncher: configure.compilerLauncher,
       wasmCompileFlags: configure.wasmCompileFlags,
       cmakeArgs: configure.cmakeArgs,
       cmakeCacheSha256: sha256File(resolve(absoluteBuildDir, "CMakeCache.txt"))
@@ -245,13 +246,15 @@ export function packageCoreCandidate(buildInfoPath) {
   for (const relativePath of [
     "provenance/dolphin-source.lock.json",
     "provenance/dolphin-vendor-snapshot-v1.json",
-    "provenance/wasm-toolchain.lock.json",
     "tools/naga-spirv-wgsl/Cargo.lock"
   ]) {
     const source = resolve(root, relativePath);
     const target = resolve(destination, basename(relativePath));
     copyFileSync(source, target);
   }
+  // The toolchain lock the build was verified against, under the name the candidate layout
+  // has always used, whichever platform's lock it was.
+  copyFileSync(resolve(root, info.toolchain.lock), resolve(destination, "wasm-toolchain.lock.json"));
   const candidateAbi = buildCandidateAbiManifest({
     template: JSON.parse(readFileSync(resolve(root, "provenance/dolphin-core-abi-v1.json"), "utf8")),
     jsPath: js.path,

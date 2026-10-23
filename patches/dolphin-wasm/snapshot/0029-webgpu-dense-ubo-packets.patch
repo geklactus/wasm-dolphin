@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:33 +0000
+Subject: [PATCH] 0029-webgpu-dense-ubo-packets
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index a22ee38..cf8b2b4 100644
+index 7db0b34648..0ee5b9627d 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,7 +18,7 @@ index a22ee38..cf8b2b4 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/CMakeLists.txt b/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
-index 473a8e0..9acc9c2 100644
+index 473a8e0aa6..9acc9c20bf 100644
 --- a/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
 +++ b/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
 @@ -11,6 +11,7 @@ add_library(videowebgpu
@@ -24,7 +30,7 @@ index 473a8e0..9acc9c2 100644
  
  target_link_libraries(videowebgpu
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index 3cd07f7..a7d0d7f 100644
+index 3cd07f7384..a7d0d7f492 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 @@ -17,6 +17,7 @@ namespace
@@ -233,7 +239,7 @@ index 3cd07f7..a7d0d7f 100644
 +}
  }  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
-index 633319a..d5c05b4 100644
+index 633319abf3..d5c05b447a 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 @@ -8,6 +8,7 @@
@@ -263,7 +269,7 @@ index 633319a..d5c05b4 100644
 +extern "C" const char* GetWebGpuDenseUboSmokeError();
  }  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index a8b7921..2fb9152 100644
+index d357263c76..b368c26bfd 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -68,6 +68,7 @@ std::atomic<u64> s_ubo_packet_payload_bytes{0};
@@ -401,7 +407,7 @@ index a8b7921..2fb9152 100644
      // DIAG one-shot: is the VS UBO actually populated? Dump dirty +
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUUboPacket.h b/Source/Core/VideoBackends/WebGPU/WebGPUUboPacket.h
 new file mode 100644
-index 0000000..a570493
+index 0000000000..a570493662
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUUboPacket.h
 @@ -0,0 +1,102 @@

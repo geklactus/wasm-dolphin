@@ -1,14 +1,14 @@
-From 2dabcc47f15daa401d7f08d8984570b23325b6cb Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: wasm-dolphin patch snapshot <snapshot@local.invalid>
-Date: Thu, 9 Jul 2026 14:42:33 -1000
-Subject: [PATCH 6/6] Experimental WebGPU backend snapshot
+Date: Thu, 22 Oct 2026 14:17:30 +0000
+Subject: [PATCH] 0006-webgpu-backend
 
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index f07566c..1250fdd 100644
+index 64b9f1b747..8e94ef1df2 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -575,7 +575,7 @@ if(ENABLE_EVDEV)
+@@ -573,7 +573,7 @@ if(ENABLE_EVDEV)
    endif()
  endif()
  
@@ -17,7 +17,7 @@ index f07566c..1250fdd 100644
    message(STATUS "Using named pipes as controller inputs")
    add_definitions(-DUSE_PIPES=1)
    message(STATUS "Watching game memory for changes")
-@@ -703,7 +703,7 @@ if(ENABLE_CUBEB)
+@@ -699,7 +699,7 @@ if(ENABLE_CUBEB)
    add_definitions(-DHAVE_CUBEB)
  endif()
  
@@ -26,7 +26,7 @@ index f07566c..1250fdd 100644
    dolphin_find_optional_system_library(LibUSB Externals/libusb)
    add_definitions(-D__LIBUSB__)
  endif()
-@@ -723,7 +723,7 @@ dolphin_find_optional_system_library(MBEDTLS Externals/mbedtls 2.28)
+@@ -720,7 +720,7 @@ dolphin_find_optional_system_library(MBEDTLS Externals/mbedtls 2.28)
  
  dolphin_find_optional_system_library(CURL Externals/curl)
  
@@ -36,7 +36,7 @@ index f07566c..1250fdd 100644
  endif()
  
 diff --git a/Externals/glslang/CMakeLists.txt b/Externals/glslang/CMakeLists.txt
-index b3e3115..09c1642 100644
+index 23e9aa6b11..d7fbb5b7bd 100644
 --- a/Externals/glslang/CMakeLists.txt
 +++ b/Externals/glslang/CMakeLists.txt
 @@ -1,9 +1,22 @@
@@ -65,7 +65,7 @@ index b3e3115..09c1642 100644
  set(ENABLE_EXCEPTIONS OFF)
  add_subdirectory(glslang)
 diff --git a/Source/Core/VideoBackends/CMakeLists.txt b/Source/Core/VideoBackends/CMakeLists.txt
-index 9d20d6d..adcf4e0 100644
+index 9d20d6d2b5..adcf4e0433 100644
 --- a/Source/Core/VideoBackends/CMakeLists.txt
 +++ b/Source/Core/VideoBackends/CMakeLists.txt
 @@ -2,6 +2,13 @@ add_subdirectory(OGL)
@@ -84,7 +84,7 @@ index 9d20d6d..adcf4e0 100644
    add_subdirectory(D3D)
 diff --git a/Source/Core/VideoBackends/WebGPU/CMakeLists.txt b/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
 new file mode 100644
-index 0000000..473a8e0
+index 0000000000..473a8e0aa6
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
 @@ -0,0 +1,44 @@
@@ -134,7 +134,7 @@ index 0000000..473a8e0
 +endif()
 diff --git a/Source/Core/VideoBackends/WebGPU/PerfQuery.h b/Source/Core/VideoBackends/WebGPU/PerfQuery.h
 new file mode 100644
-index 0000000..e327c68
+index 0000000000..e327c68e9c
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/PerfQuery.h
 @@ -0,0 +1,24 @@
@@ -164,7 +164,7 @@ index 0000000..e327c68
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/TextureCache.h b/Source/Core/VideoBackends/WebGPU/TextureCache.h
 new file mode 100644
-index 0000000..f5e3b87
+index 0000000000..f5e3b87cc4
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/TextureCache.h
 @@ -0,0 +1,35 @@
@@ -205,7 +205,7 @@ index 0000000..f5e3b87
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp b/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
 new file mode 100644
-index 0000000..358640f
+index 0000000000..358640fae0
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
 @@ -0,0 +1,332 @@
@@ -543,7 +543,7 @@ index 0000000..358640f
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/VideoBackend.h b/Source/Core/VideoBackends/WebGPU/VideoBackend.h
 new file mode 100644
-index 0000000..2652225
+index 0000000000..2652225363
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/VideoBackend.h
 @@ -0,0 +1,41 @@
@@ -590,7 +590,7 @@ index 0000000..2652225
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h b/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h
 new file mode 100644
-index 0000000..cfa8c16
+index 0000000000..cfa8c16a2c
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h
 @@ -0,0 +1,27 @@
@@ -623,7 +623,7 @@ index 0000000..cfa8c16
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 new file mode 100644
-index 0000000..2bf5aa0
+index 0000000000..2bf5aa0952
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 @@ -0,0 +1,532 @@
@@ -1161,7 +1161,7 @@ index 0000000..2bf5aa0
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 new file mode 100644
-index 0000000..cd44606
+index 0000000000..cd446061d3
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
 @@ -0,0 +1,274 @@
@@ -1441,10 +1441,10 @@ index 0000000..cd44606
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 new file mode 100644
-index 0000000..461c93e
+index 0000000000..a45863e175
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -0,0 +1,1320 @@
+@@ -0,0 +1,1325 @@
 +// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -2742,24 +2742,29 @@ index 0000000..461c93e
 +  return {640, 480, 1.0f, AbstractTextureFormat::BGRA8};
 +}
 +
-+void WebGPUEFBInterface::ReinterpretPixelData(EFBReinterpretType /* convtype */)
++void WebGPUEFBInterface::ReinterpretPixelData(FramebufferManager* /* framebuffer_manager */,
++                                              EFBReinterpretType /* convtype */)
 +{
 +}
 +
-+void WebGPUEFBInterface::PokeColor(u16 /* x */, u16 /* y */, u32 /* color */)
++void WebGPUEFBInterface::PokeColor(FramebufferManager* /* framebuffer_manager */, u16 /* x */,
++                                   u16 /* y */, u32 /* color */)
 +{
 +}
 +
-+void WebGPUEFBInterface::PokeDepth(u16 /* x */, u16 /* y */, u32 /* depth */)
++void WebGPUEFBInterface::PokeDepth(FramebufferManager* /* framebuffer_manager */, u16 /* x */,
++                                   u16 /* y */, u32 /* depth */)
 +{
 +}
 +
-+u32 WebGPUEFBInterface::PeekColorInternal(u16 /* x */, u16 /* y */)
++u32 WebGPUEFBInterface::PeekColorInternal(FramebufferManager* /* framebuffer_manager */,
++                                          u16 /* x */, u16 /* y */)
 +{
 +  return 0;
 +}
 +
-+u32 WebGPUEFBInterface::PeekDepthInternal(u16 /* x */, u16 /* y */)
++u32 WebGPUEFBInterface::PeekDepthInternal(FramebufferManager* /* framebuffer_manager */,
++                                          u16 /* x */, u16 /* y */)
 +{
 +  return 0;
 +}
@@ -2767,10 +2772,10 @@ index 0000000..461c93e
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 new file mode 100644
-index 0000000..0c98aff
+index 0000000000..2cd78c1ae2
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,283 @@
 +// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -3043,19 +3048,20 @@ index 0000000..0c98aff
 +
 +class WebGPUEFBInterface final : public EFBInterfaceBase
 +{
-+  void ReinterpretPixelData(EFBReinterpretType convtype) override;
++  void ReinterpretPixelData(FramebufferManager* framebuffer_manager,
++                            EFBReinterpretType convtype) override;
 +
-+  void PokeColor(u16 x, u16 y, u32 color) override;
-+  void PokeDepth(u16 x, u16 y, u32 depth) override;
++  void PokeColor(FramebufferManager* framebuffer_manager, u16 x, u16 y, u32 color) override;
++  void PokeDepth(FramebufferManager* framebuffer_manager, u16 x, u16 y, u32 depth) override;
 +
-+  u32 PeekColorInternal(u16 x, u16 y) override;
-+  u32 PeekDepthInternal(u16 x, u16 y) override;
++  u32 PeekColorInternal(FramebufferManager* framebuffer_manager, u16 x, u16 y) override;
++  u32 PeekDepthInternal(FramebufferManager* framebuffer_manager, u16 x, u16 y) override;
 +};
 +
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUShaderTranslator.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUShaderTranslator.cpp
 new file mode 100644
-index 0000000..5c6e730
+index 0000000000..5c6e73008e
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUShaderTranslator.cpp
 @@ -0,0 +1,243 @@
@@ -3304,7 +3310,7 @@ index 0000000..5c6e730
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUShaderTranslator.h b/Source/Core/VideoBackends/WebGPU/WebGPUShaderTranslator.h
 new file mode 100644
-index 0000000..18282a1
+index 0000000000..18282a14c0
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUShaderTranslator.h
 @@ -0,0 +1,60 @@
@@ -3370,7 +3376,7 @@ index 0000000..18282a1
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp
 new file mode 100644
-index 0000000..d96136d
+index 0000000000..d96136d588
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp
 @@ -0,0 +1,283 @@
@@ -3659,7 +3665,7 @@ index 0000000..d96136d
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h
 new file mode 100644
-index 0000000..78f49ea
+index 0000000000..78f49ea3f1
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h
 @@ -0,0 +1,94 @@
@@ -3759,7 +3765,7 @@ index 0000000..78f49ea
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 new file mode 100644
-index 0000000..c47a776
+index 0000000000..c47a776680
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.cpp
 @@ -0,0 +1,131 @@
@@ -3896,7 +3902,7 @@ index 0000000..c47a776
 +}  // namespace WebGPU
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
 new file mode 100644
-index 0000000..91ccc61
+index 0000000000..91ccc61203
 --- /dev/null
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUVertexManager.h
 @@ -0,0 +1,67 @@

@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/dolphin-emu/dolphin.git",
-    "commit": "e22551eae1c84a7e4d0b6a5c519ef4ed4ef69df1"
+    "commit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b"
   },
   "repositories": {
     ".": {
-      "commit": "e22551eae1c84a7e4d0b6a5c519ef4ed4ef69df1"
+      "commit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b"
     },
     "Externals/SFML/SFML": {
       "commit": "0fa201c969e48ecc253581c5841ce73f44d42f49"
@@ -25,522 +25,530 @@
       "commit": "01e0577914a75a2569c846778c2f93aa8e6feddd"
     }
   },
-  "patchSeriesSha256": "8e3a1b6101a233488aaedd1dbfc912dda4312423ea7ae44bf8d1df9bf8056d0f",
+  "patchSeriesSha256": "204e4b4a6dd22cdeca0e1acb4a045d01d67328e3f1f62099aec0423107b0f67f",
   "patches": [
     {
       "order": 1,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0001-browser-platform-core.patch",
-      "size": 84417,
-      "sha256": "90c09843ced0fc6f68808f2e97b3b654785dfd74a0addd93cf974426e06c89ac"
+      "size": 80542,
+      "sha256": "bf5cb5053e0c5fc25c334d7d6c1632787299da267ca883db2851949253ffa3b5"
     },
     {
       "order": 2,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0002-browser-audio.patch",
-      "size": 7222,
-      "sha256": "e134e7397f98e8e377be3573b1ad8e5acfeafd062bd3ed6fffe0d5f6f7493889"
+      "size": 7239,
+      "sha256": "5efd99ad2c25a03bca171d74b9d81a25a8f83649fcb6b808d59658556a40e93c"
     },
     {
       "order": 3,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0003-ppc-wasm-jit.patch",
-      "size": 452603,
-      "sha256": "efc071bfb3a6930145576738cc3672858f8f520944864ef1d46514324aac5795"
+      "size": 454879,
+      "sha256": "8149a6cd1ec48a3065b5d54158abb48b5699d6d9d1ea1f9f8abbc0fb77d1de73"
     },
     {
       "order": 4,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0004-software-ogl-video.patch",
-      "size": 24508,
-      "sha256": "44b2b7173c293aadac14822566618ef30a82cfc0325c8ffa76cd3a14570f5e18"
+      "size": 24549,
+      "sha256": "a318124e127447521f116fc662468f66fee4fedd755eea52da8f33c05b7191d3"
     },
     {
       "order": 5,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0005-video-common-shaders.patch",
-      "size": 59737,
-      "sha256": "bee75cfb1bdf3cd10cf4af3ec1eeafeaaad3fc11646cc4da4094a24df0c52fb0"
+      "size": 59926,
+      "sha256": "5c0c3e37a31edff51058a2efd75f3b15c1757a6ba19d1c3abb90f041d8efeb9a"
     },
     {
       "order": 6,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0006-webgpu-backend.patch",
-      "size": 160617,
-      "sha256": "552af3bdd107d5f69fee6696d722e45a9f0af6f144ce017e90b167b5c5ad352f"
+      "size": 161385,
+      "sha256": "56a203a6d99bbd6b948aafd87e20ef2707c3e5890eafb57bea5a13fe0a90061f"
     },
     {
       "order": 7,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0007-hermetic-build-inputs.patch",
-      "size": 4060,
-      "sha256": "268cd441f291d4ac26cdfdbc1820f69da7cd1c7a75eb902ed30536b47f4f42db"
+      "size": 4286,
+      "sha256": "fac165baa83367db2c522e8d1578884d6195fdcd9ac5b982bb4a54046467d9c2"
     },
     {
       "order": 8,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0008-xfb-safe-fastpaths.patch",
-      "size": 3173,
-      "sha256": "6d46035701b59d54bdd28ad1d0343b6ba4a6f45a72bcf6ebf88ffa9c2c9e7557"
+      "size": 3384,
+      "sha256": "110d65244278c56a36e6dda291fdfb378463a16110b70b4390a99e4df79f1b86"
     },
     {
       "order": 9,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0009-software-raster-phase-profile.patch",
-      "size": 7037,
-      "sha256": "6aee286ef0a83cd8de2eb3b7370ebba43022bef12b50537d58a953dd5ec80c91"
+      "size": 7259,
+      "sha256": "1b4414e66fc50b3d1254c99b63aa4585689ec24a6af356c6860258d2905d7e82"
     },
     {
       "order": 10,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0010-jit-emit-diagnostics.patch",
-      "size": 3940,
-      "sha256": "455064f141d570ad7284e04c0b97b08626f0052e5f02d987e51f526a0e035ca9"
+      "size": 5025,
+      "sha256": "26171108c9c30926f3c9da487e6c0628ca28f151074859231813d31e93863f78"
     },
     {
       "order": 11,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0011-webgpu-upload-watermark.patch",
-      "size": 11430,
-      "sha256": "e95385943e083d610f23a2e207d372fde87cee8dc71653386175bb01b73e6a91"
+      "size": 11658,
+      "sha256": "bd164f5aaef4608bbc6edbbae5e8a42893ee5f069ac8b7e0c210d4be9b34247d"
     },
     {
       "order": 12,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0012-software-raster-case-profile.patch",
-      "size": 6500,
-      "sha256": "3459c603b79f83b137067501fd4f448da73cf968a7ef0589857b1597ebd54c7c"
+      "size": 6733,
+      "sha256": "8a91845ab749b04195b021a7ca1cfc8aaab44852737c2e7e3e1307f3303ddf3e"
     },
     {
       "order": 13,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0013-webgpu-pass-state-cache.patch",
-      "size": 22358,
-      "sha256": "bc815552cdb3c4ce2a5731b8fccc6db6600fe4507210789495665fb4ad3cc675"
+      "size": 22582,
+      "sha256": "be0650d7b314b2680bdb90ff2b47e7826c4303aa3214cb38975ac9d19c5686f6"
     },
     {
       "order": 14,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0014-correlated-core-timing-profile.patch",
-      "size": 26209,
-      "sha256": "350dbbf0a2b1d4301c023de38b39cc1361dc774c96bf9075603f5dd617f9824e"
+      "size": 26461,
+      "sha256": "5ac64545962fd58097cdc42be997b62a9d88f97dc4e26321260606e25e0722f2"
     },
     {
       "order": 15,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0015-webgpu-pass-transactions.patch",
-      "size": 35959,
-      "sha256": "b780df30f8621b04ae76836a3ffc83f98e956ae8b04725ede02a19c529350e4f"
+      "size": 36176,
+      "sha256": "1fdcc3a84e42d65d2dd0a2fd3cc34cc5e31f31d075d49a840c2f84db0b095f5d"
     },
     {
       "order": 16,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0016-software-texture-hot-case.patch",
-      "size": 7930,
-      "sha256": "6efa2d800ff691fb56dfd39688e9c3a805681346dc5cddebee35367e8496a0a4"
+      "size": 8160,
+      "sha256": "0a45226a7ce95d3b332c410d48cb8023b491d785107651fce20a2f019d06bf77"
     },
     {
       "order": 17,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0017-software-texture-i4-hot-case.patch",
-      "size": 7725,
-      "sha256": "49bd1b820d15ec1352244f950890d7559a8e49b951906127bedd746a4981ee0d"
+      "size": 7946,
+      "sha256": "45aeba6aa500f9b82bb520b0492f53fad3e9084cfb2b06f35b1a736cc5229d1e"
     },
     {
       "order": 18,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0018-core-timing-phase-attribution.patch",
-      "size": 37027,
-      "sha256": "daaf3ff5c976a85338532d5bd1fd5fd61c093322c7493f83f5c75f0c8c12916e"
+      "size": 36949,
+      "sha256": "4c8c65c4fec580ece0c7c8ff105381ba4be7406d1b357d0a92d8a4ab8f6c715c"
     },
     {
       "order": 19,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0019-webgpu-ubo-slice-cache.patch",
-      "size": 21297,
-      "sha256": "01290f8d66b4b6d4a865dd303a2f5d3a1e1735aff82a778247b4d54f84dfffa6"
+      "size": 21512,
+      "sha256": "5d43fdd44ff551ae650dc47a243a711329748a5e44ef7d018371ebf82ef739ea"
     },
     {
       "order": 20,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0020-software-tev-exact-tuple-profile.patch",
-      "size": 3501,
-      "sha256": "879babd5fc0b98fe5b1231208d6efaef72380f2341546ae2f424207f54858fad"
+      "size": 3666,
+      "sha256": "1d67e27be5459048522924aa0f22a415f4d785624be162e2c651f3551f5d913a"
     },
     {
       "order": 21,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0021-software-tev-hot-case.patch",
-      "size": 19818,
-      "sha256": "1bf0a26b2ebbce65c1ef1ddebca90b32a06e593eccf8cdfa7323bcb5299d121a"
+      "size": 20032,
+      "sha256": "24ca84a109e125b346f0e15fb536b41f2e2f7b4d6bef6944deb70d53f31aa6bc"
     },
     {
       "order": 22,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0022-webgpu-upload-role-attribution.patch",
-      "size": 7726,
-      "sha256": "925640da972b8ebd7e751a70dd950a2403849c5b5b8fca4fea85acc02c0dd6c2"
+      "size": 7949,
+      "sha256": "eaf7d0a93c70c0a9d742c5597bbaca2437dbb1ee83420181bb9f6c95f6760208"
     },
     {
       "order": 23,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0023-webgpu-geometry-upload-pack.patch",
-      "size": 26240,
-      "sha256": "6d2a3e85c6eaa3904f3495ca84b74fbf6d57de2b1133ed8340ebb8267ac664e2"
+      "size": 23681,
+      "sha256": "dee6b6a575684b3c8cf45678283ee7eee6c04d8226f8d2811937ea54a43e1983"
     },
     {
       "order": 24,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0024-webgpu-upload-arena-size.patch",
-      "size": 14632,
-      "sha256": "0286fc81ec9d567073785d7f9c26b460bd1c723dd4feaef940d668416540f1d4"
+      "size": 14183,
+      "sha256": "9265e25a0ffd8d46d39209f3d1138b7848d7d724ddc2bc6a065d495897e1b3a2"
     },
     {
       "order": 25,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0025-webgpu-ubo-packet-attribution.patch",
-      "size": 7756,
-      "sha256": "e29b0c514daf3710178326c323202e98f4696a5545a3f97712df7a6fda62956e"
+      "size": 8025,
+      "sha256": "a98316203807b67962ae07b4d9a88b4673b7f3a7255b11b651b28dfeaed78be8"
     },
     {
       "order": 26,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0026-webgpu-geometry-lifecycle-invalidation.patch",
-      "size": 1977,
-      "sha256": "a4eaa3b1630be470bac18913b3f593a857ff49330e6e393d4d04ac9fb5025af4"
+      "size": 2358,
+      "sha256": "711716d88953f17e7440a01ffd115a69075108422b65c23b469b895252cc576e"
     },
     {
       "order": 27,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0027-webgpu-ring-protocol-v3.patch",
-      "size": 11668,
-      "sha256": "a8772add7f3588af0eed6f856817a77542fb630a3eb91df2df69ceeb63cb2a92"
+      "size": 11588,
+      "sha256": "62eaafcb607b3e547b2f7443fbaf1c7d78dd1dde215df762ac47b9a2357311fc"
     },
     {
       "order": 28,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0028-webgpu-command-stream-geometry-smokes.patch",
-      "size": 10666,
-      "sha256": "c86f4258aca408f2ccd9ba5269c20e1b5c99dcec9292c0b100130abbda8e96e2"
+      "size": 10896,
+      "sha256": "3aa59bd733a050a2308871b2d7b4f5872e9a64ba6da3a11ad8d286775cd0505e"
     },
     {
       "order": 29,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0029-webgpu-dense-ubo-packets.patch",
-      "size": 26015,
-      "sha256": "7cad97c580f0ebbe47d388e1bcaafe08cf2a1595f9bcc33f3ede81b35378324b"
+      "size": 26268,
+      "sha256": "d58a8d5114624f981f4e039b8483ce17cb1dd153b647abe34a82261626a49c92"
     },
     {
       "order": 30,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0030-webgpu-vertex-manager-geometry-smokes.patch",
-      "size": 26496,
-      "sha256": "7f3a30386cf08796fa55df0f7c9c752d3c91c846a172db49c8326341b40c4919"
+      "size": 25410,
+      "sha256": "3eba3818472c60fb3f7e64de8da9975057052aa74b2a5726c36a837e3999ff78"
     },
     {
       "order": 31,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0031-webgpu-geometry-range.patch",
-      "size": 34703,
-      "sha256": "a1110546a59ab827533ff3ae00d13dceebfdc0186f8f88520d88a7a1b12ed2c5"
+      "size": 35016,
+      "sha256": "da98fd3cfb649eb3bfe5be75b91f382e3544057c557fb83a716da37ddb9dfc9e"
     },
     {
       "order": 32,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0032-webgpu-producer-wait-metrics.patch",
-      "size": 6464,
-      "sha256": "45b2b25f793c5ae2285c2c33db39fd4e450ea1a71ce136ed556f68585cdbba1f"
+      "size": 6685,
+      "sha256": "e2929ddcced642196de8073dc81133d5703af3806337f182b0d8f1f85cc36ec1"
     },
     {
       "order": 33,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0033-webgpu-producer-phase-profile.patch",
-      "size": 21744,
-      "sha256": "fd1806c4265a19e33285eb53e8aeb42fd04bd577d45c9083b17b4a8c6ea81bca"
+      "size": 22002,
+      "sha256": "319e4585c2d1e91ea5557959c6a4f5d611772935511035b957cfc5c4b2c8e04b"
     },
     {
       "order": 34,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0034-wgpu-idle-fifo-tail-elision.patch",
-      "size": 12750,
-      "sha256": "38896e79a7cad3c58a93b1b5700f765d1e46cdd3230e6f13c59ac01a1ce0af46"
+      "size": 13451,
+      "sha256": "9971402d92205093c8a5165347f17c9ae289ecd991461778b6b9bf78a2ef03fc"
     },
     {
       "order": 35,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0035-webgpu-draw-resource-detail-profile.patch",
-      "size": 24267,
-      "sha256": "8911bc0ba61ad4a85c2d8984f147f70cc1444b1aadac7f004e7bb2486362423c"
+      "size": 23756,
+      "sha256": "c81ca9ecef7a407c44666c980af9ac9b996b9c55272250bddf5158c6b5014dc8"
     },
     {
       "order": 36,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0036-webgpu-deep-diagnostic-gate.patch",
-      "size": 13469,
-      "sha256": "8cbf05653d59f71076544172f0f72c0316e53c2aebab89c3a5e1e8d94b75de23"
+      "size": 13689,
+      "sha256": "def7ec628ac3cbe4e32b8af5943374e1387a575b912a95c1974a973aeb150ed2"
     },
     {
       "order": 37,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0037-webgpu-draw-profile-header-completion.patch",
-      "size": 1275,
-      "sha256": "4789b15b3f6902c965dc0ac5c3c070d08a9700eeaa42aadb2da4364a0c6f5516"
+      "size": 1469,
+      "sha256": "9391d20d49053b8af7f6cf88345fc9eb64c5b50c4aa0fc11f7c23fe8acc33135"
     },
     {
       "order": 38,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0038-webgpu-guarded-uniform-compare.patch",
-      "size": 13531,
-      "sha256": "aa523a9bc6d8ac05b0383ae5c5d001dd370fc8c2f8b9be5c60a2aebfb3d26ae2"
+      "size": 13772,
+      "sha256": "271c1d04cd58bfd6d95b08e1400c65d01e67a43546f6d73bf054702389628783"
     },
     {
       "order": 39,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0039-webgpu-native-ownership-trace.patch",
-      "size": 29230,
-      "sha256": "fee0cb0b7e897dbb3a3682acd871df58f53d76c0e87860be35357cf03c9640a8"
+      "size": 29452,
+      "sha256": "8682708274727c51bff559b6c8e9a2b3a84c58c0479af1da6a197e39b3b2fba7"
     },
     {
       "order": 40,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0040-webgpu-applied-load-boundary.patch",
-      "size": 1083,
-      "sha256": "e8e1a87cd0e65e5cef319527764b1344ff3b3b99480b7be9bf55f96e8788575d"
+      "size": 1340,
+      "sha256": "26092f252f9d36bd088dc403dfd6065bc296bfc72cd3f07db6d1665935f3160d"
     },
     {
       "order": 41,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0041-cached-interpreter-hot-counter-compileout.patch",
-      "size": 15420,
-      "sha256": "5e5c80801492b7ddbb80e23650c9dbd9a9e4e257d0690104aeafde63aad5f38c"
+      "size": 15653,
+      "sha256": "23a5236a94db053060668a336b87634a0fdef370c86ddce8d54933a3813409e5"
     },
     {
       "order": 42,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0042-cached-interpreter-frequency-ordered-dispatch.patch",
-      "size": 3816,
-      "sha256": "0e2c9c06db64ba5f081a8738dd7c67e8d1973673263184617c99b6b626f35b03"
+      "size": 4054,
+      "sha256": "df5c7da6960d4b3f4454ac5e7de4c768bd99502d5668775acb77c6df04ca33c3"
     },
     {
       "order": 43,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0043-webgpu-ubo-change-attribution.patch",
-      "size": 15138,
-      "sha256": "5d1a2b92b6563445ce429f7030a170a4225d17de2c89170dd462370632115c8f"
+      "size": 15360,
+      "sha256": "724d4a5aaa7265f96d1467b261b960e1675dcddaa73e9e43aa921d30c47e81ab"
     },
     {
       "order": 44,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0046-persistent-jit-cache-sha256-identity.patch",
-      "size": 5655,
-      "sha256": "f00205fcb64c9f4bb62b9d70fc1b9ef2bf6b76c98b81eff973f324d7e83dd7d1"
+      "size": 5884,
+      "sha256": "8fe891d4fe17538e069aec25933112622516788e7e11fd69cfdf5bf4ed4e0768"
     },
     {
       "order": 45,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0047-cached-interpreter-fast-branch-inline.patch",
-      "size": 1285,
-      "sha256": "aa633c424d7cbd344d5692455c11d2fd3e8fc9bd556a328a126e340c9556fc6b"
+      "size": 1551,
+      "sha256": "c24c1adc064a6dbddeb87e8caa2b384445b7c75c1df1e0993f46abcb0de8a60d"
     },
     {
       "order": 46,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0048-jit-fallback-map-diagnostics.patch",
-      "size": 6352,
-      "sha256": "f670a6125821d5d5921fc3fcc5bfafe172276ea90ad365657fe94b8ad4c77aa7"
+      "size": 6681,
+      "sha256": "dfabeaaa47022af7327e7645aa223beee1ac40c9f41f229c69c3933855d1b8ad"
     },
     {
       "order": 47,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0049-jit-fallback-map-sizing.patch",
-      "size": 1998,
-      "sha256": "3224d9c00e3966e11a4452cefe028dec4772ab5f74f03955e480522ac2a0b13a"
+      "size": 2156,
+      "sha256": "b02a6828d660c7ed68d201448f1abe2b2b32437787064515818b52535052cc43"
     },
     {
       "order": 48,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0050-cached-interpreter-direct-wasm-block-dispatch.patch",
-      "size": 2236,
-      "sha256": "2bfc32f09a5462c91c17316b235a367f00963a1db6a1116b5751887b987d92f7"
+      "size": 2411,
+      "sha256": "cd28672e2b2a84d54bf3afb889c9b49b8fe3f16fba07c0c63c3bd0c3b3168d99"
     },
     {
       "order": 49,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0051-tag-webgpu-ubo-ring-resource.patch",
-      "size": 3362,
-      "sha256": "88a857108ad607ee1f0eb04f7eed6d4fcacf8801d1aa948fd7f987d6195d8e8a"
+      "size": 3662,
+      "sha256": "7a3c66ad18f616c4ac6df3a9b5bcc2f08356d8686db15c6e8cb9463c3ad567a6"
     },
     {
       "order": 50,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0052-export-workerfs-nodefs-runtime-methods.patch",
-      "size": 4173,
-      "sha256": "89fd4ed8333051081a6e11255b76ed706e1296c8dbac42eeb53314451b13d044"
+      "size": 4410,
+      "sha256": "4eda1bc4725fe38ff180da3323e01765bab62e1439e45d35a7da9b020e8e3af7"
     },
     {
       "order": 51,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0053-webgpu-honour-clear-enables.patch",
-      "size": 4505,
-      "sha256": "cab4544859a9255a231ae6e0e9303d3856c9ac81da4a8ef55af3212354334b4c"
+      "size": 5410,
+      "sha256": "7fdbf581c0c8c58f865658ce590a4fd73d348a9a188590519beaa14e2b28a8b7"
     },
     {
       "order": 52,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0054-emscripten-sys-directory-and-wii-nand-seed.patch",
-      "size": 2111,
-      "sha256": "4fd5808e7aff7e0779b489bb4523ce5fd009fdc9bf6321c172b2c96a59395d79"
+      "size": 2541,
+      "sha256": "cf9fcdeae658efcbe81ccfb3224da323b07369cecfdbff9da097b28c565718ce"
     },
     {
       "order": 53,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0055-wgpu-clear-rect-probe-and-subrect-experiment.patch",
-      "size": 5481,
-      "sha256": "3362edc357b8131d31c4e100a2affcf694bb44521d3419b06d4fe5f8879353e1"
+      "size": 5940,
+      "sha256": "1773d8f5b1eba2bda42e74d3fdc51d4b7233736d493929e956af6936bad86805"
     },
     {
       "order": 54,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0056-webgpu-implement-efb-to-vram-copy.patch",
-      "size": 2012,
-      "sha256": "6daaa2fd83b67671a8bc28e946ba6c6cb281830a65478d03fbaebb0402f901ac"
+      "size": 2285,
+      "sha256": "73ed504272b6cac4b112dae38083eeeabcc5c5bc11ef1e38a0b82c2eac083a81"
     },
     {
       "order": 55,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0058-webgpu-preserve-texture-mip-levels.patch",
-      "size": 3340,
-      "sha256": "73d7c78364b1250fd829dc61e0f20b46e1bffeadfcfa67b853be2501a248bc9c"
+      "size": 3585,
+      "sha256": "2f7693660f470038d7d86dffd6364a1e63947eb639c2ce3bbf0f1f8c0aa18f72"
     },
     {
       "order": 56,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0059-webgpu-scissored-clear-rect-producer.patch",
-      "size": 6993,
-      "sha256": "ca0840a8935c4addcb7df23ba0db97e292776437e8eee1cd1182428bc7cb8ea5"
+      "size": 7222,
+      "sha256": "3711cb52e056a44e2fe0e4f29b23f6b0ed622bc3a8298d7202ab0b07080379bb"
     },
     {
       "order": 57,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0060-webgpu-preserve-independent-clear-alpha.patch",
-      "size": 4702,
-      "sha256": "f8aac12406704e78148430e34f35fe2a2059a90dd11b4e1b1b32523b2459c435"
+      "size": 4946,
+      "sha256": "c8e9988d931822170f6cc3ed3af064b46449b84760a326912f1a06dbc2a5ea59"
     },
     {
       "order": 58,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0061-webgpu-renderer-feature-mask.patch",
-      "size": 10574,
-      "sha256": "1464ed08812ca7f6b58408dc09bee6ab22ba135bf7055e34c11a3214418e92d4"
+      "size": 11071,
+      "sha256": "04ea5f0fd1df8440b1da414925b690998646a8c39f0bf6d54c51d5efa814cf86"
     },
     {
       "order": 59,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0062-webgpu-per-texture-samplers.patch",
-      "size": 7731,
-      "sha256": "fa8ddcbf653230e33a12ce41c50eed66840faca40621adfbfde5e8c9d16d281f"
+      "size": 8449,
+      "sha256": "96bfe01febc59b658171327dece1087e6d48dab314400bac95ae237bf86f60ad"
     },
     {
       "order": 60,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0063-webgpu-specialize-texture-sample-helpers.patch",
-      "size": 5091,
-      "sha256": "e651cf780896f048e6d95d1d70dd90162fb32e5c10a04e00c70b7bc0167b1943"
+      "size": 5712,
+      "sha256": "e19ecaf2fb8a461ed6a5b9e66ca3d09207d6135d5b4d7ab6398eb76d02b8bd4a"
     },
     {
       "order": 61,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0064-webgpu-expire-retained-uniform-slices.patch",
-      "size": 2149,
-      "sha256": "27e09bd166d95ab4e13a33f18e40dbeff91f9659cbbb0e34e3c62fb8dc18559b"
+      "size": 2385,
+      "sha256": "9337852adda0e5624396aaade1cec0091cca602435dace7aa2c15508bd0e2022"
     },
     {
       "order": 62,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0065-webgpu-select-uniforms-by-pipeline-usage.patch",
-      "size": 8408,
-      "sha256": "a77e7e5628a115d9fa42ebec5a0eb4eb76b53ffbe03341be3a4e82df013dc1a6"
+      "size": 8553,
+      "sha256": "dc77dce51c7c477b51c10e9ef5b5a30ccc617b85c638639b571fa61f14b55007"
     },
     {
       "order": 63,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0066-jit-retry-deferred-blocks-and-apply-policy.patch",
-      "size": 10123,
-      "sha256": "0971fe63c3948cd195c3a4d8d9717a392b727513ce6a0e9bab2557e323eabb90"
+      "size": 11119,
+      "sha256": "964b32ddf9f62995f94eb9e37e459c4bb3d985d3098de17a4ad9da9b4df0ca6e"
     },
     {
       "order": 64,
       "cwd": ".",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/snapshot/0067-cached-interpreter-static-exit-links.patch",
-      "size": 36793,
-      "sha256": "725bf2fd833181a60b0041bf110d1b5907fd0a414a6f1f2cda515d64bc0effac"
+      "size": 39804,
+      "sha256": "f83159ec477ea1023c3a7e1242a99d9d03d4cb5df0bf78619fbeeb85cdfe3fa7"
     },
     {
       "order": 65,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0068-emscripten-lazy-memory-region.patch",
+      "size": 6759,
+      "sha256": "d8514fa80bcc34d0c68cc9316e958e286b16cba5479a3fef0af102499c655eaa"
+    },
+    {
+      "order": 66,
       "cwd": "Externals/SFML/SFML",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0001-sfml-emscripten-config.patch",
@@ -548,7 +556,7 @@
       "sha256": "f82197a21fe982ad83f6ee7bbf5a03839b1cebd4d64da3eab11263842bf61d89"
     },
     {
-      "order": 66,
+      "order": 67,
       "cwd": "Externals/xxhash/xxHash",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0002-xxhash-wasm-simd-scalar.patch",

@@ -1,25 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:30 +0000
+Subject: [PATCH] 0010-jit-emit-diagnostics
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index 89cba88e6a..7c51e06343 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-@@ -387,3 +387,5 @@ u32 s_ppc_profile_window_collision_count = 0;
+@@ -386,6 +386,8 @@ u32 s_ppc_profile_window_max_us = 0;
+ u32 s_ppc_profile_window_collision_count = 0;
  constexpr u32 PPC_PROFILE_SAMPLE_MASK = 1023;
  std::array<u32, 64 * 1024> s_wasm_direct_reject_key_counts{};
 +std::array<u32, 64 * 1024> s_wasm_emit_fail_key_counts{};
 +std::array<u32, 64 * 1024> s_wasm_emit_fail_sample_pcs{};
  std::array<u32, 64 * 1024> s_wasm_helper_key_counts{};
-@@ -5413,3 +5415,3 @@ bool EmitWasmSupportedIntegerInstruction(std::vector<u8>& body, const WasmStateL
+ std::array<u32, 64 * 1024> s_wasm_system_key_counts{};
+ std::array<u32, 64 * 1024> s_wasm_fp_key_counts{};
+@@ -5411,7 +5413,7 @@ void LogWasmBlockReject(const char* reason, const GekkoOPInfo* opinfo, u32 inst_
+ // Individual subfcx/subfex/addzex tests:
+ // #define DOLPHIN_WEB_DISABLE_FASTOTHER_31SUBFCX_ALONE  // subfcx(8) alone
  // #define DOLPHIN_WEB_DISABLE_FASTOTHER_31SUBFEX_ALONE  // subfex(136) alone
 -#define DOLPHIN_WEB_DISABLE_FASTOTHER_31ADDZEX_ALONE  // addzex(202) alone
 +// #define DOLPHIN_WEB_DISABLE_FASTOTHER_31ADDZEX_ALONE  // addzex(202) alone
  // Pairs:
-@@ -7337,4 +7339,5 @@ std::vector<u8> BuildWasmCachedInterpreterBlock(std::span<const PPCAnalyst::Code
+ // #define DOLPHIN_WEB_DISABLE_FASTOTHER_31SUBFCX_SUBFEX  // subfcx(8)+subfex(136) pair
+ // #define DOLPHIN_WEB_DISABLE_FASTOTHER_31SUBFCX_ADDZEX  // subfcx(8)+addzex(202) pair
+@@ -7336,7 +7338,8 @@ void AnalyzeFastmemHoistPlan(const std::span<const PPCAnalyst::CodeOp> ops)
+ std::vector<u8> BuildWasmCachedInterpreterBlock(std::span<const PPCAnalyst::CodeOp> ops,
                                                  const WasmStateLayout& layout, u32 next_pc,
                                                  bool write_npc,
 -                                                bool allow_interpret_fallback = false)
 +                                                bool allow_interpret_fallback = false,
 +                                                bool record_emit_failure = false)
  {
-@@ -7448,4 +7451,12 @@ std::vector<u8> BuildWasmCachedInterpreterBlock(std::span<const PPCAnalyst::Code
+   AnalyzeFastmemHoistability(ops);
+   AnalyzeFastmemHoistPlan(ops);  // §28cz build the hoist plan (no-op unless enable bit set)
+@@ -7450,6 +7453,14 @@ std::vector<u8> BuildWasmCachedInterpreterBlock(std::span<const PPCAnalyst::Code
+     {
        if (!allow_interpret_fallback)
        {
 +        if (record_emit_failure)
@@ -32,7 +50,8 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +        }
          s_gpr_rc.active = false;  // §28cx C1: don't leak cache state on abort
          s_fmh_plan.active = false;  // §28cz: don't leak hoist plan on abort
-@@ -10670,9 +10681,8 @@ bool CachedInterpreter::TryWriteWasmBlock(JitBlock& code_block, JitBlock::JitBlo
+         s_fmh_plan.ops.clear();
+@@ -10679,10 +10690,9 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
    const u32 block_next_pc = did_merge ? merge_next_pc : nextPC;
    const std::vector<u8> bytes =
        BuildWasmCachedInterpreterBlock(ops, layout, block_next_pc, write_npc,
@@ -43,7 +62,9 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 -    ++s_wasm_block_emit_fail_count;
      LogWasmBlockReject("emit", nullptr, 0, js.blockStart, code_block.m_num_instructions);
      return false;
-@@ -11205,4 +11215,26 @@ std::string CachedInterpreter::GetPpcWasmHelperStats() const
+   }
+@@ -11213,6 +11223,28 @@ extern "C" const char* GetPpcWasmHelperStats()
+         << " bcctr:" << s_fast_branch_bcctrx_ops << " bdnz:" << s_fast_branch_bdnz_ops;
    }
  
 +  std::vector<std::pair<u32, u32>> hot_emit_failures;
@@ -70,3 +91,4 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +
    std::vector<std::pair<u32, u32>> hot_direct_rejects;
    hot_direct_rejects.reserve(16);
+   for (std::size_t key = 0; key < s_wasm_direct_reject_key_counts.size(); ++key)

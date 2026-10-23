@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0027-webgpu-ring-protocol-v3
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 index 49c5ca15fe..01688b2f71 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
@@ -296,5 +302,3 @@ index f9dba06ff1..94145ed6c2 100644
    bool StagePassRecord(const CmdRecord& rec);
    void PoisonPass();
    void ResetPassStaging();
-warning: in the working copy of 'Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp', LF will be replaced by CRLF the next time Git touches it
-warning: in the working copy of 'Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h', LF will be replaced by CRLF the next time Git touches it

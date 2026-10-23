@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:32 +0000
+Subject: [PATCH] 0022-webgpu-upload-role-attribution
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 index 1ff313d4be..2518723698 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
@@ -65,7 +71,7 @@ index b22bb476d5..69569b8558 100644
    bool PushUploadTexture(u32 id, u32 src_heap_ptr, u32 bytes_per_row, u32 w, u32 h,
                           u32 mip_level = 0, u32 layer = 0);
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index ced9eeb3d3..2a37096900 100644
+index 4ca4b0402d..4dd6077c89 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -1094,7 +1094,7 @@ bool WebGPUGfx::PrepareDrawResources()
@@ -130,7 +136,7 @@ index ced9eeb3d3..2a37096900 100644
      return;
    // The next recorded draw is a utility draw — group0/binding0's
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 0329a08e8a..1a825f3367 100644
+index ab78958197..6e6ad02499 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -187,7 +187,7 @@ private:

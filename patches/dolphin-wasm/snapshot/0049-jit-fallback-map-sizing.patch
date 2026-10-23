@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:20:53 +0000
+Subject: [PATCH] 0049-jit-fallback-map-sizing
+
+
 diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
+index a60a9398f1..05bbdb5d29 100644
 --- a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
 +++ b/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp
-@@ -626,7 +626,7 @@ size_t JitBaseBlockCache::FastLookupIndexForAddress(u32 address, u32 feature_fla
-     return (static_cast<size_t>(feature_flags) << 30) | (address >> 2);
+@@ -643,6 +643,6 @@ size_t JitBaseBlockCache::FastLookupIndexForAddress(u32 address, u32 feature_fla
    }
    else
    {
@@ -11,12 +17,10 @@ diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.cpp b/Source/Core/Core/
    }
  }
 diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.h b/Source/Core/Core/PowerPC/JitCommon/JitCache.h
+index 58dfbf4278..834575661b 100644
 --- a/Source/Core/Core/PowerPC/JitCommon/JitCache.h
 +++ b/Source/Core/Core/PowerPC/JitCommon/JitCache.h
-@@ -18,7 +18,16 @@
- #include "Common/CommonTypes.h"
- #include "Common/RangeSet.h"
- #include "Core/HW/Memmap.h"
+@@ -22,6 +22,15 @@
  #include "Core/PowerPC/Gekko.h"
  #include "Core/PowerPC/PPCAnalyst.h"
  
@@ -30,7 +34,9 @@ diff --git a/Source/Core/Core/PowerPC/JitCommon/JitCache.h b/Source/Core/Core/Po
 +              "DOLPHIN_WEB_FALLBACK_MAP_BITS must be 16, 18, or 20");
 +
  class JitBase;
-@@ -194,8 +203,9 @@ public:
+ 
+ struct JitFallbackDispatchStats
+@@ -131,8 +140,9 @@ public:
    // The size of the fast map is determined like this:
    // ((4 GiB guest memory space) / (4-byte alignment) * sizeof(JitBlock*)) << (3 feature flag bits)
    static constexpr u64 FAST_BLOCK_MAP_SIZE = 0x10'0000'0000;

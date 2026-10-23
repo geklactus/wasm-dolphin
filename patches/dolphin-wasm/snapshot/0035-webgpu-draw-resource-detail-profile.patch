@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0035-webgpu-draw-resource-detail-profile
+
+
 diff --git a/Source/Core/Core/CMakeLists.txt b/Source/Core/Core/CMakeLists.txt
-index b5c7743..3f1af48 100644
+index 6f01e979cb..6342c7dd8d 100644
 --- a/Source/Core/Core/CMakeLists.txt
 +++ b/Source/Core/Core/CMakeLists.txt
-@@ -934,7 +934,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
+@@ -946,7 +946,7 @@ if(EMSCRIPTEN AND DOLPHIN_WASM_CORE_SOURCE)
      "-sSTACK_SIZE=5242880"
      "-sDEFAULT_PTHREAD_STACK_SIZE=5242880"
      "-sPTHREAD_POOL_SIZE=16"
@@ -12,7 +18,7 @@ index b5c7743..3f1af48 100644
      # Day-7 persistent JIT cache: this pre-js installs a pthread-side
      # message receiver for "dolphin-jit-cache" payloads. Each pthread
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
-index 7ef59b1..e609476 100644
+index 7ef59b143f..e60947644e 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 @@ -13,6 +13,7 @@
@@ -33,7 +39,7 @@ index 7ef59b1..e609476 100644
    return true;
  }
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index c7e798c..a724559 100644
+index 80cf50343f..3c4d5abbeb 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -31,6 +31,7 @@
@@ -226,7 +232,7 @@ index c7e798c..a724559 100644
  }
  
 diff --git a/Source/Core/VideoCommon/ShaderCache.cpp b/Source/Core/VideoCommon/ShaderCache.cpp
-index 2627656..d54946b 100644
+index 2627656d0d..d54946b093 100644
 --- a/Source/Core/VideoCommon/ShaderCache.cpp
 +++ b/Source/Core/VideoCommon/ShaderCache.cpp
 @@ -24,6 +24,7 @@
@@ -280,10 +286,10 @@ index 2627656..d54946b 100644
      return it->second.first.get();
  
 diff --git a/Source/Core/VideoCommon/VertexManagerBase.cpp b/Source/Core/VideoCommon/VertexManagerBase.cpp
-index 2bc6d58..bc9eceb 100644
+index f3f27518bf..0f43dfcd9d 100644
 --- a/Source/Core/VideoCommon/VertexManagerBase.cpp
 +++ b/Source/Core/VideoCommon/VertexManagerBase.cpp
-@@ -41,6 +41,7 @@
+@@ -40,6 +40,7 @@
  #include "VideoCommon/VideoBackendBase.h"
  #include "VideoCommon/VideoCommon.h"
  #include "VideoCommon/VideoConfig.h"
@@ -291,7 +297,7 @@ index 2bc6d58..bc9eceb 100644
  #include "VideoCommon/XFMemory.h"
  #include "VideoCommon/XFStateManager.h"
  
-@@ -797,6 +798,8 @@ void VertexManagerBase::CalculateNormals(NativeVertexFormat* format)
+@@ -772,6 +773,8 @@ void VertexManagerBase::CalculateNormals(NativeVertexFormat* format)
  
  void VertexManagerBase::UpdatePipelineConfig()
  {
@@ -302,7 +308,7 @@ index 2bc6d58..bc9eceb 100644
    {
 diff --git a/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h b/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h
 new file mode 100644
-index 0000000..da7c0f6
+index 0000000000..c84d50ebce
 --- /dev/null
 +++ b/Source/Core/VideoCommon/WasmWebGpuDrawProfile.h
 @@ -0,0 +1,168 @@
@@ -474,37 +480,3 @@ index 0000000..da7c0f6
 +           !counters.sampled_max_ns.compare_exchange_weak(previous_max, duration_ns,
 +                                                          std::memory_order_relaxed))
 +    {
-+    }
-+  }
-+
-+  ScopedSample(const ScopedSample&) = delete;
-+  ScopedSample& operator=(const ScopedSample&) = delete;
-+
-+  void Pause()
-+  {
-+    if (!m_sampled || !m_active)
-+      return;
-+    const auto duration =
-+        std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - m_start).count();
-+    m_elapsed_ns += static_cast<std::uint64_t>(duration);
-+    m_active = false;
-+  }
-+
-+  void Resume()
-+  {
-+    if (!m_sampled || m_active)
-+      return;
-+    m_start = Clock::now();
-+    m_active = true;
-+  }
-+
-+private:
-+  using Clock = std::chrono::steady_clock;
-+
-+  Phase m_phase;
-+  Clock::time_point m_start{};
-+  std::uint64_t m_elapsed_ns = 0;
-+  bool m_sampled = false;
-+  bool m_active = false;
-+};
-+}  // namespace DolphinWeb::WebGpuDrawProfile

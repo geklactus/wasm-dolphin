@@ -1,8 +1,14 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:14 +0000
+Subject: [PATCH] 0064-webgpu-expire-retained-uniform-slices
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index 51ef539..ad87128 100644
+index 6ac8f005cf..4046a84eb8 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-@@ -1849,7 +1849,9 @@ bool WebGPUGfx::PrepareDrawResources()
+@@ -1854,7 +1854,9 @@ bool WebGPUGfx::PrepareDrawResources()
    // kUboSliceStride (the shadow's size).
    static_assert(sizeof(vsm.constants) <= sizeof(m_vs_shadow),
                  "VS shadow must cover VertexShaderConstants");
@@ -13,7 +19,7 @@ index 51ef539..ad87128 100644
                            !IsUboSliceLive(m_vs_publication_serial);
    const auto vs_plan = DolphinWeb::WebGpuUniformFastPath::Plan(
        uniform_fast_enabled, vsm.dirty, m_vs_off == kUboOffNone, m_vs_shadow_valid,
-@@ -1909,7 +1911,7 @@ bool WebGPUGfx::PrepareDrawResources()
+@@ -1914,7 +1916,7 @@ bool WebGPUGfx::PrepareDrawResources()
    auto& psm = system.GetPixelShaderManager();
    static_assert(sizeof(psm.constants) <= sizeof(m_ps_shadow),
                  "PS shadow must cover PixelShaderConstants");
@@ -22,7 +28,7 @@ index 51ef539..ad87128 100644
                            !IsUboSliceLive(m_ps_publication_serial);
    const auto ps_plan = DolphinWeb::WebGpuUniformFastPath::Plan(
        uniform_fast_enabled, psm.dirty, m_ps_off == kUboOffNone, m_ps_shadow_valid,
-@@ -1996,7 +1998,7 @@ bool WebGPUGfx::PrepareDrawResources()
+@@ -2001,7 +2003,7 @@ bool WebGPUGfx::PrepareDrawResources()
    auto& gsm = system.GetGeometryShaderManager();
    static_assert(sizeof(gsm.constants) <= sizeof(m_gs_shadow),
                  "GS shadow must cover GeometryShaderConstants");

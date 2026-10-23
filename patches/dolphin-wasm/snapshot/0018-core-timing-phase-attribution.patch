@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:31 +0000
+Subject: [PATCH] 0018-core-timing-phase-attribution
+
+
 diff --git a/Source/Core/Core/CoreTiming.cpp b/Source/Core/Core/CoreTiming.cpp
-index 247a30c107e4ccfb9d595ca9713666c151e2166f..68eefc8937bc8a7131537fc27eaf888abb2a0b63 100644
+index 247a30c107..68eefc8937 100644
 --- a/Source/Core/Core/CoreTiming.cpp
 +++ b/Source/Core/Core/CoreTiming.cpp
 @@ -549,8 +549,15 @@ void CoreTimingManager::SleepUntil(TimePoint time_point)
@@ -21,7 +27,7 @@ index 247a30c107e4ccfb9d595ca9713666c151e2166f..68eefc8937bc8a7131537fc27eaf888a
    }
    else
 diff --git a/Source/Core/Core/HW/DVD/DVDThread.cpp b/Source/Core/Core/HW/DVD/DVDThread.cpp
-index f03498aae12f8265b1b1bea7b7f3ea8871a0d9eb..35b63454c394b8118f0ff5c0a5e935cd939e675d 100644
+index f03498aae1..35b63454c3 100644
 --- a/Source/Core/Core/HW/DVD/DVDThread.cpp
 +++ b/Source/Core/Core/HW/DVD/DVDThread.cpp
 @@ -228,6 +228,12 @@ void DVDThread::GlobalFinishRead(Core::System& system, u64 id, s64 cycles_late)
@@ -159,7 +165,7 @@ index f03498aae12f8265b1b1bea7b7f3ea8871a0d9eb..35b63454c394b8118f0ff5c0a5e935cd
  
  void DVDThread::ProcessReadRequest(ReadRequest&& request)
 diff --git a/Source/Core/Core/HW/VideoInterface.cpp b/Source/Core/Core/HW/VideoInterface.cpp
-index 0bda6efdf27ddf503389878cdbb267fe8cd1184d..2fa67037f14895d8976ee454e0d19deed4baea29 100644
+index 0bda6efdf2..2fa67037f1 100644
 --- a/Source/Core/Core/HW/VideoInterface.cpp
 +++ b/Source/Core/Core/HW/VideoInterface.cpp
 @@ -900,7 +900,13 @@ void VideoInterfaceManager::EndField(FieldType field, u64 ticks)
@@ -188,10 +194,10 @@ index 0bda6efdf27ddf503389878cdbb267fe8cd1184d..2fa67037f14895d8976ee454e0d19dee
  
      Core::UpdateInputGate(!Config::Get(Config::MAIN_INPUT_BACKGROUND_INPUT),
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-index fb44b647d8df5a0d17edb03c061a5570bc0acd05..bf2ce5b6cff4e44e3960e661fe9496488232826c 100644
+index 48b0ac741d..9f3e7b0626 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
-@@ -11076,6 +11076,36 @@ extern "C" const char* GetPpcWasmHelperStats()
+@@ -11082,6 +11082,36 @@ extern "C" const char* GetPpcWasmHelperStats()
        << ",throttle=" << worst_slice.throttle_wait_us << ",dvd=" << worst_slice.dvd_wait_us
        << ",video=" << worst_slice.video_work_us
        << ",event=" << DolphinWeb::WasmTimingProfile::EventName(worst_slice.event) << " ";
@@ -229,7 +235,7 @@ index fb44b647d8df5a0d17edb03c061a5570bc0acd05..bf2ce5b6cff4e44e3960e661fe949648
    out << s_wasm_helper_call_count << " calls, " << s_wasm_helper_halt_count << " halt";
    out << " | imports system:" << s_wasm_system_call_count << " fp:" << s_wasm_fp_call_count
 diff --git a/Source/Core/Core/WasmTimingProfile.h b/Source/Core/Core/WasmTimingProfile.h
-index 13c8b377f6dd3a328be1f2a21e79b860c1b39892..7cedebe6a47d68382bccf9af078a0ce8a6f686e0 100644
+index 13c8b377f6..7cedebe6a4 100644
 --- a/Source/Core/Core/WasmTimingProfile.h
 +++ b/Source/Core/Core/WasmTimingProfile.h
 @@ -6,8 +6,10 @@

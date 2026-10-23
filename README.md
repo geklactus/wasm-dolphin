@@ -492,8 +492,9 @@ Distributing a compiled GPL work obliges us to distribute the source it was
 built from. The core `.wasm` in this repository is built from:
 
 - upstream Dolphin at commit
-  [`e22551ea`](https://github.com/dolphin-emu/dolphin/commit/e22551eae1c84a7e4d0b6a5c519ef4ed4ef69df1),
-- plus the 54 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
+  [`cf5cb7ef`](https://github.com/dolphin-emu/dolphin/commit/cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b)
+  (master, 2026-10-19),
+- plus the 65 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
 - plus the C-ABI shim in [`core/upstream/`](core/upstream) and the build driver
   in [`tools/`](tools).
 

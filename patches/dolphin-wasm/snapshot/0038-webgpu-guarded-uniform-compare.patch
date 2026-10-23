@@ -1,5 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:34 +0000
+Subject: [PATCH] 0038-webgpu-guarded-uniform-compare
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index c866381..2a05acb 100644
+index 82a54e32d0..3c93ee36a2 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -33,6 +33,7 @@
@@ -233,7 +239,7 @@ index c866381..2a05acb 100644
    if (off == kUboOffNone)
      return;
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
-index 06b9527..cea68eb 100644
+index b5db24b836..8eb0eb2236 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
 @@ -190,7 +190,7 @@ private:
@@ -247,7 +253,7 @@ index 06b9527..cea68eb 100644
    void ExpireUboClass(UboClass ubo_class);
 diff --git a/Source/Core/VideoCommon/WasmWebGpuUniformFastPath.h b/Source/Core/VideoCommon/WasmWebGpuUniformFastPath.h
 new file mode 100644
-index 0000000..8c1e840
+index 0000000000..8c1e840f48
 --- /dev/null
 +++ b/Source/Core/VideoCommon/WasmWebGpuUniformFastPath.h
 @@ -0,0 +1,28 @@

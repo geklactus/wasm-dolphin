@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { delimiter, dirname, relative, resolve } from "node:path";
 import { sha256File, verifyWasmToolchain } from "./wasm-toolchain.mjs";
 
 const root = process.cwd();
@@ -78,7 +78,7 @@ const toolchain = verifyWasmToolchain();
 const { emcc, emcmake, cmake, ninja, cargo, rustc } = toolchain.paths;
 const nagaEnvironment = {
   ...process.env,
-  PATH: `${dirname(rustc)};${dirname(emcc)};${process.env.PATH ?? ""}`,
+  PATH: [dirname(rustc), dirname(emcc), process.env.PATH ?? ""].join(delimiter),
   RUSTC: rustc,
   CARGO: cargo
 };
@@ -163,6 +163,15 @@ const cmakeArgs = [
 // path, but pass it explicitly so a clone at any path links correctly.
 cmakeArgs.push(`-DDOLPHIN_WASM_PROJECT_ROOT=${root.replace(/\\/g, "/")}`);
 
+// DOLPHIN_WASM_COMPILER_LAUNCHER=ccache (or sccache) puts a compiler cache in front of emcc
+// so a CI rebuild after a one-file change does not recompile all of Dolphin. It changes
+// nothing about the output; the launcher is recorded in the configure evidence.
+const compilerLauncher = (process.env.DOLPHIN_WASM_COMPILER_LAUNCHER ?? "").trim();
+if (compilerLauncher) {
+  cmakeArgs.push(`-DCMAKE_C_COMPILER_LAUNCHER=${compilerLauncher}`);
+  cmakeArgs.push(`-DCMAKE_CXX_COMPILER_LAUNCHER=${compilerLauncher}`);
+}
+
 // PROFILING_FUNCS=1 adds a wasm name section to the core so CPU profiles show
 // real symbols instead of wasm-function[N]. Name section only — no codegen or
 // optimisation change, so timings stay representative. Off by default.
@@ -206,8 +215,10 @@ writeFileSync(resolve(buildDir, "wasm-dolphin-configure.json"), `${JSON.stringif
   fallbackMapDiagnostics,
   fallbackMapBits,
   directWasmBlockDispatch,
+  compilerLauncher: compilerLauncher || undefined,
   wasmCompileFlags,
   cmakeArgs,
+  toolchainLock: relative(root, toolchain.lockPath).replace(/\\/g, "/"),
   toolchainLockSha256: toolchain.hashes.lock,
   cargoLockSha256: toolchain.hashes.cargoLock
 }, null, 2)}\n`);

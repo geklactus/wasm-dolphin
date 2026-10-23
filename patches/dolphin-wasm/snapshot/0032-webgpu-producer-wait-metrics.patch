@@ -1,3 +1,9 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:17:33 +0000
+Subject: [PATCH] 0032-webgpu-producer-wait-metrics
+
+
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
 index 0e785ef710..6c735b5807 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
@@ -134,7 +140,7 @@ index bb78f36634..91c48b9786 100644
    // BEGIN_PASS..END_PASS records stay private until END_PASS can publish the
    // entire batch. Resource creation/uploads remain immediate so the consumer
 diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
-index b632adcfe9..9a9485c6fa 100644
+index cde2d360d9..59783b99e2 100644
 --- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 +++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
 @@ -252,7 +252,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* GetWebGpuStateCacheStats()

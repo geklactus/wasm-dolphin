@@ -1,4 +1,11 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Thu, 22 Oct 2026 14:22:50 +0000
+Subject: [PATCH] 0067-cached-interpreter-static-exit-links
+
+
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index 4a82174f2e..49bbc0c9e3 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
 @@ -53,6 +53,13 @@
@@ -15,18 +22,18 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  #ifndef DOLPHIN_WEB_DIRECT_WASM_BLOCK_DISPATCH
  #define DOLPHIN_WEB_DIRECT_WASM_BLOCK_DISPATCH 0
  #endif
-@@ -7754,6 +7761,10 @@
+@@ -7739,6 +7746,10 @@ bool CachedInterpreter::Init()
+   if (!CheckValidity())
+     return false;
  
- void CachedInterpreter::Init()
- {
 +#if DOLPHIN_WEB_STATIC_EXIT_LINKS && DOLPHIN_WEB_STATIC_EXIT_LINK_STATS
 +  s_static_link_stats.Init();
 +#endif
-+#line 7757
++#line 7742
    RefreshConfig();
  
    AllocCodeSpace(CODE_SIZE);
-@@ -7770,17 +7781,29 @@
+@@ -7758,17 +7769,29 @@ bool CachedInterpreter::Init()
  
  void CachedInterpreter::Shutdown()
  {
@@ -56,7 +63,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    if (!normal_entry)
    {
      Jit(m_ppc_state.pc);
-@@ -7822,8 +7845,19 @@
+@@ -7810,8 +7833,19 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
  #ifdef __EMSCRIPTEN__
    DOLPHIN_WEB_HOT_COUNT(++s_wasm_redispatch_entry_count);
  #endif
@@ -76,7 +83,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    while (true)
    {
      const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
-@@ -8051,9 +8085,28 @@
+@@ -8025,9 +8059,28 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
      if (redispatch_enabled && m_ppc_state.downcount > 0 &&
          *redispatch_state_ptr == CPU::State::Running)
      {
@@ -105,7 +112,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
          Jit(m_ppc_state.pc);
          return;
        }
-@@ -8064,6 +8117,10 @@
+@@ -8038,6 +8091,10 @@ void CachedInterpreter::ExecuteOneBlock([[maybe_unused]] bool allow_redispatch)
  #endif
      break;
    }
@@ -116,7 +123,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  #ifdef __EMSCRIPTEN__
    if (profile_block)
    {
-@@ -8129,6 +8186,10 @@
+@@ -8103,6 +8160,10 @@ void CachedInterpreter::Run()
      {
        ExecuteOneBlock();
      } while (m_ppc_state.downcount > 0 && *state_ptr == CPU::State::Running);
@@ -127,7 +134,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
      // §28cn slice timing close-out. compile_us already accumulated by
      // DolphinWeb_RecordModuleUs into s_wasm_compile_us_this_slice (just
      // before the §28ce reset above zeros it for next slice — but we read
-@@ -8174,6 +8235,10 @@
+@@ -8148,6 +8209,10 @@ void CachedInterpreter::Run()
        }
      }
    }
@@ -138,7 +145,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  }
  
  void CachedInterpreter::SingleStep()
-@@ -8184,6 +8249,10 @@
+@@ -8158,6 +8223,10 @@ void CachedInterpreter::SingleStep()
    ApplyRequestedWasmPolicy(*this);
  #endif
    ExecuteOneBlock(false);  // §28bt: never chain blocks under the debugger step
@@ -149,7 +156,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  }
  
  s32 CachedInterpreter::StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
-@@ -8197,12 +8266,20 @@
+@@ -8171,12 +8240,20 @@ template <bool profiled>
  s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
                                  const EndBlockOperands<profiled>& operands)
  {
@@ -170,7 +177,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    return 0;
  }
  
-@@ -8472,8 +8549,22 @@
+@@ -8431,8 +8508,22 @@ bool CachedInterpreter::TryWriteMeleeIdlePollLoop(u32 index, PowerPC::PowerPCMan
      return false;
    }
  
@@ -193,7 +200,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    return true;
  }
  
-@@ -8545,8 +8636,21 @@
+@@ -8504,8 +8595,21 @@ bool CachedInterpreter::TryWriteMeleeTitleLoop(u32 index, PowerPC::PowerPCManage
        ++fp_inst;
    }
  
@@ -215,7 +222,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    return true;
  }
  
-@@ -9972,8 +10076,19 @@
+@@ -9865,8 +9969,19 @@ static u64 FastFctiwzResult(PowerPC::PowerPCState& ppc_state, double value)
  s32 CachedInterpreter::FastMeleeIdlePollLoop(PowerPC::PowerPCState& ppc_state,
                                               const MeleeIdlePollLoopOperands& operands)
  {
@@ -235,7 +242,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    (void)power_pc;
    constexpr s32 fallback_size = sizeof(AnyCallback) + sizeof(operands);
  
-@@ -10089,14 +10204,29 @@
+@@ -9982,14 +10097,29 @@ s32 CachedInterpreter::FastMeleeIdlePollLoop(PowerPC::PowerPCState& ppc_state,
      ++s_fast_melee_idle_poll_loop_exits;
    if (guard_failed)
      ++s_fast_melee_idle_poll_loop_fallbacks;
@@ -265,7 +272,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    (void)power_pc;
    constexpr s32 fallback_size = sizeof(AnyCallback) + sizeof(operands);
  
-@@ -10358,6 +10488,10 @@
+@@ -10251,6 +10381,10 @@ s32 CachedInterpreter::FastMeleeTitleLoop(PowerPC::PowerPCState& ppc_state,
    ++s_fast_melee_title_loop_blocks;
    s_fast_melee_title_loop_iterations =
        SaturatingAddU32(s_fast_melee_title_loop_iterations, iterations);
@@ -276,7 +283,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    return 0;
  }
  
-@@ -10617,6 +10751,10 @@
+@@ -10510,6 +10644,10 @@ s32 CachedInterpreter::FastDcbxLoop(PowerPC::PowerPCState& ppc_state,
  DOLPHIN_WEB_DIRECT_WASM_BLOCK_INLINE s32 CachedInterpreter::RunWasmBlock(
      PowerPC::PowerPCState& ppc_state, const WasmBlockOperands& operands)
  {
@@ -287,7 +294,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    using WasmBlockFunction = int (*)(int);
  
    ++s_wasm_block_run_count;
-@@ -10631,6 +10769,10 @@
+@@ -10524,6 +10662,10 @@ DOLPHIN_WEB_DIRECT_WASM_BLOCK_INLINE s32 CachedInterpreter::RunWasmBlock(
      ppc_state.downcount -= operands.downcount;
      UpdatePerformanceMonitorIfNeeded(operands.downcount, operands.num_load_stores,
                                       operands.num_fp_inst, ppc_state);
@@ -298,7 +305,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
      return 0;
    }
    return sizeof(AnyCallback) + sizeof(operands);
-@@ -11078,9 +11220,34 @@
+@@ -10966,9 +11108,34 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
    // or ends in a branch) — never the partial non-fused tail below.
    const bool fuse_end_block =
        did_merge || compiled_entire_block || compiled_block_ends_with_branch;
@@ -333,7 +340,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  
    if (fuse_end_block)
      return true;
-@@ -11088,6 +11255,10 @@
+@@ -10976,6 +11143,10 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
    auto& interpreter = m_system.GetInterpreter();
    for (u32 i = prefix_count; i < code_block.m_num_instructions; i++)
    {
@@ -344,9 +351,9 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
      PPCAnalyst::CodeOp& op = m_code_buffer[i];
      js.op = &op;
  
-@@ -11142,14 +11313,30 @@
+@@ -11030,14 +11201,30 @@ bool CachedInterpreter::TryWriteWasmBlock(u32 nextPC)
  
-       if (op.branchIsIdleLoop)
+       if (op.branchAction == PPCAnalyst::BranchAction::IdleLoop)
          Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
 +#if DOLPHIN_WEB_STATIC_EXIT_LINKS
 +      if (op.canEndBlock)
@@ -354,11 +361,11 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +                          StaticExitLinks::Branch(op.inst.hex, op.address) :
 +                          StaticExitLinks::Descriptor{});
 +#else
-+#line 11145
++#line 11033
        if (op.canEndBlock)
          WriteEndBlock();
 +#endif
-+#line 11147
++#line 11035
      }
    }
    if (code_block.m_broken)
@@ -367,15 +374,15 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +    Write(WriteBrokenBlockNPC, {nextPC});
 +    WriteEndBlock(StaticExitLinks::Fallthrough(nextPC));
 +#else
-+#line 11151
++#line 11039
      Write(WriteBrokenBlockNPC, {nextPC});
      WriteEndBlock();
 +#endif
-+#line 11153
++#line 11041
    }
    return true;
  }
-@@ -11277,6 +11464,13 @@
+@@ -11165,6 +11352,13 @@ extern "C" const char* GetPpcProfileStats()
  
  extern "C" const char* GetPpcWasmHelperStats()
  {
@@ -389,7 +396,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    static std::string stats;
    static int last_refresh_policy = -1;
    const int applied_policy = s_applied_wasm_policy.load(std::memory_order_acquire);
-@@ -11293,6 +11487,19 @@
+@@ -11181,6 +11375,19 @@ extern "C" const char* GetPpcWasmHelperStats()
    const u64 fallback_dispatch_total =
        fallback_dispatch.hit + fallback_dispatch.empty_miss + fallback_dispatch.collision_miss;
  
@@ -409,7 +416,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    if (!stats.empty() && applied_policy == last_refresh_policy &&
        s_wasm_block_run_count - last_refresh_block_run_count < STATS_REFRESH_BLOCK_RUNS &&
        s_wasm_block_attempt_count == last_refresh_block_attempt_count &&
-@@ -11302,6 +11509,8 @@
+@@ -11190,6 +11397,8 @@ extern "C" const char* GetPpcWasmHelperStats()
        s_fast_dcbx_loop_blocks == last_refresh_dcbx_loop_blocks &&
        s_fast_melee_idle_poll_loop_blocks == last_refresh_idle_poll_loop_blocks &&
        fallback_dispatch_total == last_refresh_fallback_dispatch_total)
@@ -418,7 +425,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    {
      return stats.c_str();
    }
-@@ -11314,6 +11523,10 @@
+@@ -11202,6 +11411,10 @@ extern "C" const char* GetPpcWasmHelperStats()
    last_refresh_dcbx_loop_blocks = s_fast_dcbx_loop_blocks;
    last_refresh_idle_poll_loop_blocks = s_fast_melee_idle_poll_loop_blocks;
    last_refresh_fallback_dispatch_total = fallback_dispatch_total;
@@ -429,7 +436,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  
    std::vector<std::pair<u32, u32>> hot_keys;
    hot_keys.reserve(16);
-@@ -11776,6 +11989,10 @@
+@@ -11661,6 +11874,10 @@ extern "C" const char* GetPpcWasmHelperStats()
          << std::hex << s_wasm_helper_branch_sample_pcs[key] << "/"
          << s_wasm_helper_branch_sample_insts[key] << std::dec;
    }
@@ -440,7 +447,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    stats = out.str();
    return stats.c_str();
  }
-@@ -12244,6 +12461,51 @@
+@@ -12129,6 +12346,51 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
    return true;
  }
  
@@ -492,7 +499,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  void CachedInterpreter::WriteEndBlock()
  {
    if (IsProfilingEnabled())
-@@ -12257,6 +12519,8 @@
+@@ -12142,6 +12404,8 @@ void CachedInterpreter::WriteEndBlock()
    }
  }
  
@@ -501,7 +508,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  bool CachedInterpreter::SetEmitterStateToFreeCodeRegion()
  {
    const auto free = m_free_ranges.by_size_begin();
-@@ -12278,6 +12542,10 @@
+@@ -12163,6 +12427,10 @@ void CachedInterpreter::FreeRanges()
  
  void CachedInterpreter::ResetFreeMemoryRanges()
  {
@@ -512,7 +519,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    m_free_ranges.clear();
    m_free_ranges.insert(region, region + region_size);
  }
-@@ -12326,7 +12594,14 @@
+@@ -12211,7 +12479,14 @@ void CachedInterpreter::Jit(u32 em_address, bool clear_cache_and_retry_on_failur
        if (b->near_begin != b->near_end)
          m_free_ranges.erase(b->near_begin, b->near_end);
  
@@ -527,7 +534,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
  
  #ifdef JIT_LOG_GENERATED_CODE
        LogGeneratedCode();
-@@ -12334,6 +12609,10 @@
+@@ -12219,6 +12494,10 @@ void CachedInterpreter::Jit(u32 em_address, bool clear_cache_and_retry_on_failur
  
        return;
      }
@@ -538,7 +545,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    }
  
    if (clear_cache_and_retry_on_failure)
-@@ -12367,15 +12646,26 @@
+@@ -12252,8 +12531,15 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
  #ifdef __EMSCRIPTEN__
    if (auto deferred = s_deferred_wasm_queues.find(this); deferred != s_deferred_wasm_queues.end())
      deferred->second.Recompiled(em_address, static_cast<u32>(m_ppc_state.feature_flags));
@@ -549,12 +556,12 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +#line 12370
    if (TryWriteWasmBlock(nextPC))
      return true;
- #endif
-+#line 12372
 +#endif
++#line 12372
+ #endif
  
    if (IsProfilingEnabled())
-     Write(StartProfiledBlock, {js.curBlock->profile_data.get()});
+@@ -12261,6 +12547,10 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
  
    for (u32 i = 0; i < code_block.m_num_instructions; i++)
    {
@@ -565,9 +572,9 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
      PPCAnalyst::CodeOp& op = m_code_buffer[i];
      js.op = &op;
  
-@@ -12431,14 +12721,30 @@
+@@ -12316,14 +12606,30 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
  
-       if (op.branchIsIdleLoop)
+       if (op.branchAction == PPCAnalyst::BranchAction::IdleLoop)
          Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
 +#if DOLPHIN_WEB_STATIC_EXIT_LINKS
 +      if (op.canEndBlock)
@@ -575,11 +582,11 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +                          StaticExitLinks::Branch(op.inst.hex, op.address) :
 +                          StaticExitLinks::Descriptor{});
 +#else
-+#line 12434
++#line 12319
        if (op.canEndBlock)
          WriteEndBlock();
 +#endif
-+#line 12436
++#line 12321
      }
    }
    if (code_block.m_broken)
@@ -588,15 +595,15 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
 +    Write(WriteBrokenBlockNPC, {nextPC});
 +    WriteEndBlock(StaticExitLinks::Fallthrough(nextPC));
 +#else
-+#line 12440
++#line 12325
      Write(WriteBrokenBlockNPC, {nextPC});
      WriteEndBlock();
 +#endif
-+#line 12442
++#line 12327
    }
  
    if (HasWriteFailed())
-@@ -12474,6 +12780,10 @@
+@@ -12359,6 +12665,10 @@ std::size_t CachedInterpreter::DisassembleFarCode(const JitBlock& block, std::os
  
  void CachedInterpreter::ClearCache()
  {
@@ -608,9 +615,10 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/
    s_deferred_wasm_queues.erase(this);
  #endif
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h
+index 852848f383..2c23418f60 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h
-@@ -61,7 +61,15 @@
+@@ -61,7 +61,15 @@ private:
    void ExecuteOneBlock(bool allow_redispatch = true);
  
    bool HandleFunctionHooking(u32 address);
@@ -626,7 +634,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h b/So
  
    // Finds a free memory region and sets the code emitter to point at that region.
    // Returns false if no free memory region can be found.
-@@ -221,6 +229,10 @@
+@@ -218,6 +226,10 @@ struct CachedInterpreter::EndBlockOperands<false>
    u32 num_load_stores;
    u32 num_fp_inst;
    u32 : 32;
@@ -637,7 +645,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h b/So
  };
  
  template <>
-@@ -264,6 +276,10 @@
+@@ -261,6 +273,10 @@ struct CachedInterpreter::MeleeIdlePollLoopOperands
    u32 next_pc;
    u32 instruction_cycles_per_iteration;
    u32 instruction_loadstores_per_iteration;
@@ -648,7 +656,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h b/So
  };
  
  struct CachedInterpreter::MeleeTitleLoopOperands
-@@ -274,6 +290,10 @@
+@@ -271,6 +287,10 @@ struct CachedInterpreter::MeleeTitleLoopOperands
    u32 cycle_count_per_iteration;
    u32 loadstores_per_iteration;
    u32 fp_inst_per_iteration;
@@ -659,31 +667,30 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.h b/So
  };
  
  struct CachedInterpreter::OsInterruptFunctionOperands
-@@ -330,5 +350,9 @@
+@@ -327,5 +347,9 @@ struct CachedInterpreter::WasmBlockOperands
    u32 num_load_stores;
    u32 num_fp_inst;
    s32 end_block;
--};
--#endif
 +#if DOLPHIN_WEB_STATIC_EXIT_LINKS
 +  StaticExitLinks::Descriptor links{};
 +#endif
 +#line 333
-+};
-+#endif
+ };
+ #endif
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.cpp
+index 8dcac6dbde..cdcda74caf 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.cpp
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.cpp
-@@ -12,12 +12,20 @@
+@@ -12,12 +12,20 @@ CachedInterpreterBlockCache::CachedInterpreterBlockCache(JitBase& jit) : JitBase
  
- void CachedInterpreterBlockCache::Init()
+ bool CachedInterpreterBlockCache::Init()
  {
 +#if DOLPHIN_WEB_STATIC_EXIT_LINKS
 +  AdvanceStaticLinkEpoch();
 +#endif
 +#line 15
-   JitBaseBlockCache::Init();
    ClearRangesToFree();
+   return JitBaseBlockCache::Init();
  }
  
  void CachedInterpreterBlockCache::DestroyBlock(JitBlock& block)
@@ -695,7 +702,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCa
    JitBaseBlockCache::DestroyBlock(block);
  
    if (block.near_begin != block.near_end)
-@@ -32,6 +40,11 @@
+@@ -32,6 +40,11 @@ void CachedInterpreterBlockCache::ClearRangesToFree()
  void CachedInterpreterBlockCache::WriteLinkBlock(const JitBlock::LinkData& source,
                                                   const JitBlock* dest)
  {
@@ -708,6 +715,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCa
  
  void CachedInterpreterBlockCache::WriteDestroyBlock(const JitBlock& block)
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h
+index 974a0710bd..81d0fda287 100644
 --- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h
 @@ -8,6 +8,8 @@
@@ -719,7 +727,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCa
  
  class JitBase;
  
-@@ -21,6 +23,12 @@
+@@ -21,6 +23,12 @@ public:
    void DestroyBlock(JitBlock& block) override;
  
    void ClearRangesToFree();
@@ -732,7 +740,7 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCa
  
    const std::vector<std::pair<u8*, u8*>>& GetRangesToFree() const
    {
-@@ -31,5 +39,9 @@
+@@ -31,5 +39,9 @@ private:
    void WriteLinkBlock(const JitBlock::LinkData& source, const JitBlock* dest) override;
    void WriteDestroyBlock(const JitBlock& block) override;
  
@@ -742,106 +750,9 @@ diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCa
 +#line 34
    std::vector<std::pair<u8*, u8*>> m_ranges_to_free_on_next_codegen;
  };
-diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
---- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
-+++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
-@@ -12,6 +12,23 @@
- 
- #include "Core/HLE/HLE.h"
- 
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+
-+namespace
-+{
-+void DisassembleStaticExitLinks(std::ostream& stream, const StaticExitLinks::Descriptor& links)
-+{
-+  fmt::println(stream, "  static exits={}", links.count);
-+  for (u32 i = 0; i < links.count && i < links.cells.size(); ++i)
-+  {
-+    const auto& cell = links.cells[i];
-+    fmt::println(stream, "    pc=0x{:08x}, linked={}, call={}", cell.pc,
-+                 cell.entry != nullptr, cell.call != 0);
-+  }
-+}
-+}  // namespace
-+#endif
-+#line 15
- s32 CachedInterpreterEmitter::PoisonCallback(std::ostream& stream, const void* operands)
- {
-   stream << "PoisonCallback()\n";
-@@ -30,6 +47,10 @@
- {
-   fmt::println(stream, "EndBlock<profiled={}>(downcount={}, num_load_stores={}, num_fp_inst={})",
-                profiled, operands.downcount, operands.num_load_stores, operands.num_fp_inst);
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+  DisassembleStaticExitLinks(stream, operands.links);
-+#endif
-+#line 33
-   return sizeof(AnyCallback) + sizeof(operands);
- }
- 
-@@ -167,26 +188,48 @@
- s32 CachedInterpreter::FastMeleeIdlePollLoop(std::ostream& stream,
-                                              const MeleeIdlePollLoopOperands& operands)
- {
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+  const auto& [power_pc, current_pc, next_pc, instruction_cycles_per_iteration,
-+               instruction_loadstores_per_iteration, static_links] = operands;
-+#else
-+#line 170
-   const auto& [power_pc, current_pc, next_pc, instruction_cycles_per_iteration,
-                instruction_loadstores_per_iteration] = operands;
-+#endif
-+#line 172
-   fmt::println(stream,
-                "FastMeleeIdlePollLoop(current_pc=0x{:08x}, next_pc=0x{:08x}, "
-                "instruction_cycles={}, instruction_loadstores={})",
-                current_pc, next_pc, instruction_cycles_per_iteration,
-                instruction_loadstores_per_iteration);
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+  DisassembleStaticExitLinks(stream, operands.links);
-+#endif
-+#line 177
-   return sizeof(AnyCallback) + sizeof(operands);
- }
- 
- s32 CachedInterpreter::FastMeleeTitleLoop(std::ostream& stream,
-                                           const MeleeTitleLoopOperands& operands)
- {
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+  const auto& [power_pc, current_pc, next_pc, cycle_count_per_iteration,
-+               loadstores_per_iteration, fp_inst_per_iteration, static_links] = operands;
-+#else
-+#line 183
-   const auto& [power_pc, current_pc, next_pc, cycle_count_per_iteration,
-                loadstores_per_iteration, fp_inst_per_iteration] = operands;
-+#endif
-+#line 185
-   fmt::println(stream,
-                "FastMeleeTitleLoop(current_pc=0x{:08x}, next_pc=0x{:08x}, cycles={}, "
-                "loadstores={}, fp={})",
-                current_pc, next_pc, cycle_count_per_iteration, loadstores_per_iteration,
-                fp_inst_per_iteration);
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+  DisassembleStaticExitLinks(stream, operands.links);
-+#endif
-+#line 190
-   return sizeof(AnyCallback) + sizeof(operands);
- }
- 
-@@ -280,6 +323,10 @@
- {
-   fmt::println(stream, "RunWasmBlock(handle={}, next_pc=0x{:08x})", operands.handle,
-                operands.next_pc);
-+#if DOLPHIN_WEB_STATIC_EXIT_LINKS
-+  DisassembleStaticExitLinks(stream, operands.links);
-+#endif
-+#line 283
-   return sizeof(AnyCallback) + sizeof(operands);
- }
- #endif
 diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterLink.h b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterLink.h
 new file mode 100644
+index 0000000000..fe2099d1c1
 --- /dev/null
 +++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreterLink.h
 @@ -0,0 +1,285 @@
@@ -1130,3 +1041,102 @@ new file mode 100644
 +};
 +}  // namespace StaticExitLinks
 +#endif
+diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
+index f3c6af7b18..2185ae96d9 100644
+--- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
++++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
+@@ -12,6 +12,23 @@
+ 
+ #include "Core/HLE/HLE.h"
+ 
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++
++namespace
++{
++void DisassembleStaticExitLinks(std::ostream& stream, const StaticExitLinks::Descriptor& links)
++{
++  fmt::println(stream, "  static exits={}", links.count);
++  for (u32 i = 0; i < links.count && i < links.cells.size(); ++i)
++  {
++    const auto& cell = links.cells[i];
++    fmt::println(stream, "    pc=0x{:08x}, linked={}, call={}", cell.pc,
++                 cell.entry != nullptr, cell.call != 0);
++  }
++}
++}  // namespace
++#endif
++#line 15
+ s32 CachedInterpreterEmitter::PoisonCallback(std::ostream& stream, const void* operands)
+ {
+   stream << "PoisonCallback()\n";
+@@ -30,6 +47,10 @@ s32 CachedInterpreter::EndBlock(std::ostream& stream, const EndBlockOperands<pro
+ {
+   fmt::println(stream, "EndBlock<profiled={}>(downcount={}, num_load_stores={}, num_fp_inst={})",
+                profiled, operands.downcount, operands.num_load_stores, operands.num_fp_inst);
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++  DisassembleStaticExitLinks(stream, operands.links);
++#endif
++#line 33
+   return sizeof(AnyCallback) + sizeof(operands);
+ }
+ 
+@@ -158,26 +179,48 @@ s32 CachedInterpreter::FastFloat(std::ostream& stream, const FastInstructionOper
+ s32 CachedInterpreter::FastMeleeIdlePollLoop(std::ostream& stream,
+                                              const MeleeIdlePollLoopOperands& operands)
+ {
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++  const auto& [power_pc, current_pc, next_pc, instruction_cycles_per_iteration,
++               instruction_loadstores_per_iteration, static_links] = operands;
++#else
++#line 170
+   const auto& [power_pc, current_pc, next_pc, instruction_cycles_per_iteration,
+                instruction_loadstores_per_iteration] = operands;
++#endif
++#line 172
+   fmt::println(stream,
+                "FastMeleeIdlePollLoop(current_pc=0x{:08x}, next_pc=0x{:08x}, "
+                "instruction_cycles={}, instruction_loadstores={})",
+                current_pc, next_pc, instruction_cycles_per_iteration,
+                instruction_loadstores_per_iteration);
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++  DisassembleStaticExitLinks(stream, operands.links);
++#endif
++#line 177
+   return sizeof(AnyCallback) + sizeof(operands);
+ }
+ 
+ s32 CachedInterpreter::FastMeleeTitleLoop(std::ostream& stream,
+                                           const MeleeTitleLoopOperands& operands)
+ {
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++  const auto& [power_pc, current_pc, next_pc, cycle_count_per_iteration,
++               loadstores_per_iteration, fp_inst_per_iteration, static_links] = operands;
++#else
++#line 183
+   const auto& [power_pc, current_pc, next_pc, cycle_count_per_iteration,
+                loadstores_per_iteration, fp_inst_per_iteration] = operands;
++#endif
++#line 185
+   fmt::println(stream,
+                "FastMeleeTitleLoop(current_pc=0x{:08x}, next_pc=0x{:08x}, cycles={}, "
+                "loadstores={}, fp={})",
+                current_pc, next_pc, cycle_count_per_iteration, loadstores_per_iteration,
+                fp_inst_per_iteration);
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++  DisassembleStaticExitLinks(stream, operands.links);
++#endif
++#line 190
+   return sizeof(AnyCallback) + sizeof(operands);
+ }
+ 
+@@ -271,6 +314,10 @@ s32 CachedInterpreter::RunWasmBlock(std::ostream& stream, const WasmBlockOperand
+ {
+   fmt::println(stream, "RunWasmBlock(handle={}, next_pc=0x{:08x})", operands.handle,
+                operands.next_pc);
++#if DOLPHIN_WEB_STATIC_EXIT_LINKS
++  DisassembleStaticExitLinks(stream, operands.links);
++#endif
++#line 283
+   return sizeof(AnyCallback) + sizeof(operands);
+ }
+ #endif
