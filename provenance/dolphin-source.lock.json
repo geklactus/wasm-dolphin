@@ -25,7 +25,7 @@
       "commit": "01e0577914a75a2569c846778c2f93aa8e6feddd"
     }
   },
-  "patchSeriesSha256": "88e6b6b98ea0085abc50acb488366230f1f1b121945f1de58e11a16ff611bbd4",
+  "patchSeriesSha256": "d0e5ed8ef3c776b71ae51a201dba9d4834e84f70ba5525444f4b4c3cac3c6164",
   "patches": [
     {
       "order": 1,
@@ -591,12 +591,20 @@
       "order": 71,
       "cwd": ".",
       "hashMode": "lf-normalized",
-      "path": "patches/dolphin-wasm/snapshot/0074-software-raster-threads.patch",
-      "size": 44009,
-      "sha256": "04fc7cbe536eeb5d76d7b0e7127e67bc5e81a86f620d505546825b613993d477"
+      "path": "patches/dolphin-wasm/snapshot/0074-webgpu-readback-and-per-game-capabilities.patch",
+      "size": 35217,
+      "sha256": "ba57ecc2776ef56c7f22c4e523ea1996e7a9dd164fe6478ac476534591731d07"
     },
     {
       "order": 72,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0075-software-raster-threads.patch",
+      "size": 44009,
+      "sha256": "2d94cca567062e797d4228e4ed80d6c77ee0f1c9c78127caca6ab5303ee4eda4"
+    },
+    {
+      "order": 73,
       "cwd": "Externals/SFML/SFML",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0001-sfml-emscripten-config.patch",
@@ -604,7 +612,7 @@
       "sha256": "f82197a21fe982ad83f6ee7bbf5a03839b1cebd4d64da3eab11263842bf61d89"
     },
     {
-      "order": 73,
+      "order": 74,
       "cwd": "Externals/xxhash/xxHash",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0002-xxhash-wasm-simd-scalar.patch",

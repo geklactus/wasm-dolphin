@@ -1,4 +1,4 @@
-import { lookupGameProfile, readGameId } from "./game-profiles.js";
+import { gameProfilePayload, lookupGameProfile, readGameId } from "./game-profiles.js";
 import { AudioController } from "./audio.js";
 import {
   DEFAULT_WIIMOTE_MOUSE_BINDINGS,
@@ -855,30 +855,46 @@ function updateScreenHud(info) {
 }
 
 
-// Pick the renderer from measured per-game results before the core loads.
+// Apply the per-game profile before the core loads.
 //
 // The id is read straight from the disc file rather than from the mounted core,
 // because by the time the core can report it the backend is already fixed --
 // changing it then would mean a restart, and the file selection is gone.
 //
-// Only applies when the user has not chosen a renderer explicitly, either by
-// URL flag or in the settings panel. A measured default is a good guess, not a
-// reason to override someone who has already decided.
+// A profile carries up to three things (src/game-profiles.js): the renderer
+// choice, upstream's GameSettings lines for the title, and the renderer feature
+// bits the title needs. The "Auto per-game" switch governs all of them. An
+// explicit ?video= flag overrides only the renderer choice: a measured default
+// is a good guess, not a reason to override someone who has already decided,
+// but the settings and features describe what the title needs on whichever
+// path runs, so they still apply.
 async function applyGameProfile(file) {
-  if (!elements.autoProfile?.checked) return;
-  if (new URLSearchParams(window.location.search).has("video")) return;
+  if (!elements.autoProfile?.checked) {
+    host.applyGameProfile(null);
+    return;
+  }
   let gameId = null;
   try {
     gameId = await readGameId(file);
   } catch {
+    host.applyGameProfile(null);
     return;  // unreadable header is not a reason to fail the mount
   }
   const profile = lookupGameProfile(gameId);
+  host.applyGameProfile(gameProfilePayload(gameId, profile));
   if (!profile) return;
-  const backend = profile.renderer === "hardware" ? "WebGPU-Real" : "Software Renderer";
-  if (host.applyVideoBackend(backend)) {
-    setStatus(`${gameId}: ${profile.renderer} renderer (${profile.why})`);
+  const notes = [];
+  const rendererPinned = new URLSearchParams(window.location.search).has("video");
+  if (!rendererPinned) {
+    const backend = profile.renderer === "hardware" ? "WebGPU-Real" : "Software Renderer";
+    if (host.applyVideoBackend(backend)) notes.push(`${profile.renderer} renderer`);
   }
+  if (profile.ini) notes.push(`upstream ${profile.upstream ?? "game settings"}`);
+  const features = Object.entries(profile.features ?? {})
+    .filter(([, on]) => on)
+    .map(([name]) => name);
+  if (features.length) notes.push(`features: ${features.join(" ")}`);
+  if (notes.length) setStatus(`${gameId}: ${notes.join("; ")} (${profile.why})`);
 }
 
 async function mountFile(file) {

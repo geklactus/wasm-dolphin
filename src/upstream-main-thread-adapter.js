@@ -1,4 +1,5 @@
 import { parseDolHeader } from "./dol.js";
+import { rendererFeatureMask, writeGameSettingsIni } from "./game-profiles.js";
 import {
   DEFAULT_UPSTREAM_CORE_SHA256,
   DEFAULT_UPSTREAM_CORE_URL,
@@ -30,7 +31,9 @@ export class UpstreamMainThreadAdapter {
     oglTestClear = false,
     fastSoftwareRaster = 0,
     softwareRasterThreads = "auto",
-    xfbFastPaths = 0
+    xfbFastPaths = 0,
+    gameProfile = null,
+    rendererFeatureOverrides = {}
   } = {}) {
     this.coreUrl = coreUrl;
     this.expectedCoreSha256 = expectedCoreSha256;
@@ -51,6 +54,8 @@ export class UpstreamMainThreadAdapter {
     this.fastSoftwareRaster = Math.min(3, Math.max(0, Number(fastSoftwareRaster) || 0));
     this.softwareRasterThreads = resolveSoftwareRasterThreads(softwareRasterThreads, { videoBackend });
     this.xfbFastPaths = (Number(xfbFastPaths) || 0) & 3;
+    this.gameProfile = gameProfile ?? null;
+    this.rendererFeatureOverrides = { ...(rendererFeatureOverrides ?? {}) };
     this.module = null;
     this.api = null;
     this.loaded = false;
@@ -132,6 +137,12 @@ export class UpstreamMainThreadAdapter {
     this.api.setPresentationScale?.(Number(this.presentationScale));
     this.api.setFastSoftwareRaster?.(this.fastSoftwareRaster);
     this.api.setXfbFastPaths?.(this.xfbFastPaths);
+    // Renderer feature bits: backend defaults, the title's profile, then URL
+    // overrides (src/game-profiles.js). Only the WebGPU backend reads them,
+    // but the mask is sent on every path so the status log shows it.
+    this.api.setRendererFeatureMask?.(
+      rendererFeatureMask(this.gameProfile, this.rendererFeatureOverrides)
+    );
     this.api.coreInit?.();
     this.loaded = true;
     this.refreshStats();
@@ -147,6 +158,7 @@ export class UpstreamMainThreadAdapter {
     return {
       mountDisc: (path) => ccall("MountDisc", "number", ["string"], [path]),
       coreInit: optionalCwrap("CoreInit", "number", []),
+      setRendererFeatureMask: optionalCwrap("SetRendererFeatureMask", "number", ["number"]),
       setVideoBackend: optionalCwrap("SetVideoBackend", null, ["string"]),
       setCpuThread: optionalCwrap("SetCpuThread", null, ["number"]),
       setCpuCore: optionalCwrap("SetCpuCore", null, ["string"]),
@@ -292,6 +304,7 @@ export class UpstreamMainThreadAdapter {
     this.coreBoot = { attempted: false, accepted: false, path, skippedReason: "" };
     if (this.api.bootDisc && file.size >= MIN_FULL_BOOT_BYTES) {
       this.coreBoot.attempted = true;
+      writeGameSettingsIni(fs, this.gameProfile, this.onStatus);
       this.coreBoot.accepted = Boolean(this.api.bootDisc(path));
       this.api.pumpHostJobs?.();
     } else if (this.api.bootDisc) {

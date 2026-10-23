@@ -357,6 +357,27 @@ a material speed win — a wrong frame can be fast. Titles with a big FPS win bu
 no verified screenshot are left out. Anything absent from the table keeps the
 shipping default. See [the hardware renderer bug log](docs/webgpu-hardware-renderer-bugs.md).
 
+An entry can also carry what upstream Dolphin knows about the title and what
+the hardware path needs to honour it:
+
+- **upstream game settings** — the `[Video_*]` lines from upstream's
+  `Data/Sys/GameSettings/<id>.ini`. This build embeds only `Sys/Wii`, so those
+  per-game settings were never loaded on either path; the worker now writes
+  the profile's lines to `/dolphin-sys/GameSettings/<id>.ini` before boot and
+  Dolphin's own game-config loader applies them. `[Core]` lines are never
+  carried (F-Zero GX's upstream `CPUThread = False` would undo dual core).
+- **renderer features** — bits of the WebGPU backend's feature mask. Three
+  default on for every title: the scissored clear, reporting no early-Z so
+  VideoCommon's zcomploc fallback runs (the SPIR-V→WGSL translation drops
+  `FORCE_EARLY_Z`), and reporting no logic ops so VideoCommon approximates
+  them. The fourth, **GPU readback** (EFB copies to RAM, EFB peeks, bounding
+  box), is a per-copy stall and is on only where upstream's settings say the
+  game reads its EFB back. Each bit has a URL flag for bisection:
+  `wgpuclearrect`, `wgpuzcomploc`, `wgpulogicop`, `wgpureadback` (`=0`/`=1`).
+
+The **Auto per-game** switch governs all of it; an explicit `?video=` flag
+overrides only the renderer choice. The status line names what was applied.
+
 ### Rust: `tools/naga-spirv-wgsl`
 
 A small Rust staticlib that transpiles **SPIR-V → WGSL** using wgpu's
@@ -521,7 +542,7 @@ built from. The core `.wasm` in this repository is built from:
 - upstream Dolphin at commit
   [`cf5cb7ef`](https://github.com/dolphin-emu/dolphin/commit/cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b)
   (master, 2026-10-19),
-- plus the 73 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
+- plus the 72 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
 - plus the C-ABI shim in [`core/upstream/`](core/upstream) and the build driver
   in [`tools/`](tools).
 

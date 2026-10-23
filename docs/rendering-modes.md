@@ -53,6 +53,18 @@ and is default-off because its per-draw clocks and atomic counters perturb the
 path being measured. Ordinary `metrics=1` keeps general telemetry without
 activating this detailed UBO instrumentation.
 
+The hardware backend's renderer feature mask is resolved per title by
+`src/game-profiles.js` (backend defaults, then the game's profile, then the
+URL). Each bit has a flag for bisection; absent flags leave the profile's
+choice standing:
+
+| flag | bit | default | what it does |
+| --- | --- | --- | --- |
+| `wgpuclearrect=0` | 0 | on | sub-rect / independent-channel EFB clears as a scissored draw inside the pass |
+| `wgpuzcomploc=0` | 1 | on | report no early-Z, so VideoCommon's zcomploc hack runs instead of a `FORCE_EARLY_Z` the WGSL translation drops |
+| `wgpulogicop=0` | 2 | on | report no logic ops, so VideoCommon approximates them (with shader help) rather than the producer |
+| `wgpureadback=1` | 3 | off | GPU → heap readback: EFB copies to RAM, EFB peeks and the bounding box return real values; a stall per copy |
+
 `video=ogl` is an OGL/WebGL2-style diagnostic backend. Its JIT safety behavior
 is intentionally more conservative; see [JIT flags](jit-flags.md).
 

@@ -1,27 +1,27 @@
 {
   "schemaVersion": 1,
   "abiVersion": 1,
-  "coreId": "sha256:505f65897984b7832dd048cbcfe16ed420061af9d659c1f5b92f97f0fde23698",
+  "coreId": "sha256:3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c",
   "upstreamCommit": "cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b",
   "artifacts": [
     {
       "path": "cores/dolphin/dolphin-core-upstream.js",
       "hashMode": "lf-normalized",
-      "size": 267945,
-      "sha256": "e53105fe13e44d9baf2c8e50a88ee0c4e1a6b6e9b6694bcd17b4f62aab29ced3"
+      "size": 267323,
+      "sha256": "e548d03f1e6fc27225df17390982c382e20f5e177118781c9382b05df70a549c"
     },
     {
       "path": "cores/dolphin/dolphin-core-upstream.wasm",
-      "size": 13231667,
-      "sha256": "505f65897984b7832dd048cbcfe16ed420061af9d659c1f5b92f97f0fde23698"
+      "size": 13219953,
+      "sha256": "3b734762589306c6f74d3bfde1f9ad9b54d424a67e8123e8c5e04ed4c27d9f2c"
     }
   ],
   "contractSources": [
     {
       "path": "core/upstream/dolphin_web_discio.cpp",
       "hashMode": "lf-normalized",
-      "size": 45641,
-      "sha256": "eb3909f2234d52faa580b73d5b0c2b74720327694191dbc2d4aa68f1361ad121"
+      "size": 45448,
+      "sha256": "2815c46b414ff4b67a58cd55d714e1b41f9b38984023e5a0dca29a71d2a4206b"
     },
     {
       "path": "core/upstream/dolphin_web_raster_profile.h",
@@ -38,14 +38,14 @@
     {
       "path": "core/upstream/dolphin_web_core.cpp",
       "hashMode": "lf-normalized",
-      "size": 57603,
-      "sha256": "974e68a3685f28ebac86173bc46045e6659251f3d1ef24889b9c7a70c8d06091"
+      "size": 47412,
+      "sha256": "a45ade36ce3bec7602a3ec0e35c6ba9c11eb526bc9861ec71adb9b1d35153aa2"
     },
     {
       "path": "src/app.js",
       "hashMode": "lf-normalized",
-      "size": 51742,
-      "sha256": "871034bf6c0942799676100fbb6e126d82927007f63c8df5468d870b53c1a307"
+      "size": 52374,
+      "sha256": "70139efa0777bc7c2841f903afe02358b35d1b19a68fbe433c620b0903a8f988"
     },
     {
       "path": "src/audio.js",
@@ -80,8 +80,8 @@
     {
       "path": "src/core-host.js",
       "hashMode": "lf-normalized",
-      "size": 67279,
-      "sha256": "8bddafafe51858a075efb91b4054e9811fad1c3c33c949b437608d5ff9bac2f6"
+      "size": 68196,
+      "sha256": "ac7e60e7358886a7323f0f57389f92f637a6320942e271afbbbe405365c35800"
     },
     {
       "path": "src/diagnostic-log-filter.js",
@@ -134,8 +134,8 @@
     {
       "path": "src/upstream-discio-worker.js",
       "hashMode": "lf-normalized",
-      "size": 629281,
-      "sha256": "f086585d0f4958e7eafa8092d5e16ec717907c32da844f1dd5ec2b0a1113547f"
+      "size": 636914,
+      "sha256": "a8fd809bee9186041e3c103b20c73fd654aed40b50e57558611b4ff2c9794537"
     },
     {
       "path": "src/wgpu-renderer-worker-probe.js",
@@ -152,20 +152,20 @@
     {
       "path": "src/upstream-main-thread-adapter.js",
       "hashMode": "lf-normalized",
-      "size": 21468,
-      "sha256": "94de7ca45b1ddfbc63515f0ab422387b1fefcda9970e3bb368788ba1a82efd3e"
+      "size": 21996,
+      "sha256": "aa47a4c12e7eac96ace7e85c0c65871b5a4a00f6714600476a18d0b080a52c48"
     },
     {
       "path": "src/upstream-worker-adapter.js",
       "hashMode": "lf-normalized",
-      "size": 43290,
-      "sha256": "918e1d82cd4b993b945e54fc7aec07e5d4dea00d9b30da63ad4980e5a37c659d"
+      "size": 43421,
+      "sha256": "245122907f158ebee31e1b86ecd2e1e3af8d0f8414c971492f338505051c2d13"
     },
     {
       "path": "src/upstream-worker-protocol.js",
       "hashMode": "lf-normalized",
-      "size": 6765,
-      "sha256": "b12fe036708056f9cfc532b7aa33d6f9572cf0320adcef1a970435b6e4e6ad16"
+      "size": 5117,
+      "sha256": "9f548b9d98a6888c703747c840ed6afe205ccb714a900661a0b6d3be8d3cfeec"
     },
     {
       "path": "src/wgpu-pass-state-cache.js",
@@ -481,11 +481,6 @@
     "_SetWgpuIdleFifoTailElisionEnabled",
     "_SetWiimoteState",
     "_SetXfbFastPaths",
-    "_SoftwareRasterThreadsSmokeInit",
-    "_SoftwareRasterThreadsSmokeRun",
-    "_SoftwareRasterThreadsSmokeShutdown",
-    "_SoftwareRasterThreadsSmokeStarted",
-    "_SoftwareRasterThreadsSmokeWorkerBands",
     "_StopCore",
     "_TestDcbxLoopPattern",
     "_TestPpcWasmDirectCandidate",
