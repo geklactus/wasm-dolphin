@@ -434,6 +434,10 @@ function sampleCoreFpsRolling(coreFrame) {
 // frame counter not advancing in wall-clock time.
 let ppcWasmJitFuseLastFrame = -1;
 let ppcWasmJitFuseLastTime = 0;
+let ppcWasmJitFuseLastCompileCount = -1;
+// §29e: how many fresh blocks in a fuse window say "this is cold code, not a JIT that
+// made things worse". A Wii menu transition brings a few thousand.
+const WASM_JIT_FUSE_COLD_CODE_COMPILES = 150;
 let ppcWasmJitTier = "guarded";
 let ppcWasmJitWarmupFrames = 3600;
 let pacedPresentationActive = false;
@@ -3592,6 +3596,7 @@ function resetPpcWasmJitTiming(invalidateBaseline = false) {
   ppcWasmJitCoreSampleTime = 0;
   ppcWasmJitCoreFpsRolling = 0;
   ppcWasmJitFuseLastFrame = -1;
+  ppcWasmJitFuseLastCompileCount = -1;
   ppcWasmJitFuseLastTime = 0;
   presentationMaxIntervalMs = 0;
   maxIntervalSincePresentationFps = 0;
@@ -3663,6 +3668,7 @@ function maybeEnablePpcWasmJit(coreFrame = api?.getFrame?.() ?? 0) {
   // pre-cooldown (frame,time) pair can't compute a bogus low coreFps
   // across the cooldown gap on the first post-re-engage fuse check.
   ppcWasmJitFuseLastFrame = -1;
+  ppcWasmJitFuseLastCompileCount = -1;
   const reason = dolphinJitCachePreWarmed && effectiveWarmup === MINIMUM_PRE_JIT_FRAMES
     ? `pre-warmed cache hit, JIT engaged at frame ${coreFrame}`
     : `JIT enabled after ${coreFrame} stable video frames`;
@@ -3732,6 +3738,7 @@ function maybeDisablePpcWasmJit(coreFrame = api?.getFrame?.() ?? 0) {
   const nowMs = (typeof performance !== "undefined" ? performance.now()
                  : Date.now());
   const cf = coreFrame >>> 0;
+  const compileCount = api.getPpcWasmBlockCompileCount?.() ?? 0;
   let catastrophic = false;
   let regressed = false;
   if (ppcWasmJitFuseLastFrame >= 0) {
@@ -3739,16 +3746,29 @@ function maybeDisablePpcWasmJit(coreFrame = api?.getFrame?.() ?? 0) {
     if (dtMs >= 1500) {
       const dFrames = (cf - ppcWasmJitFuseLastFrame) >>> 0;
       const coreFps = (dFrames * 1000) / dtMs;
-      catastrophic = coreFps < WASM_JIT_ABSOLUTE_FLOOR_FPS;
-      regressed =
-        ppcWasmJitPreEngageCoreFps >= WASM_JIT_REGRESSION_MIN_BASELINE_FPS &&
-        coreFps < ppcWasmJitPreEngageCoreFps * WASM_JIT_REGRESSION_FRACTION;
+      // §29e: a window in which the JIT compiled a lot of fresh blocks is cold code
+      // — a new screen, a save routine — and the slow frames are the interpreter
+      // running what hasn't compiled yet. Turning the JIT off there made the core
+      // slower still and brought it back 300 frames later into the same burst (the
+      // 20%/160% sawtooth measured on Mario Kart Wii's menus). Judge only windows
+      // the JIT had nothing new to do in; the 5 s post-activation stall guard above
+      // still catches a real freeze.
+      const coldCode = ppcWasmJitFuseLastCompileCount >= 0 &&
+        compileCount - ppcWasmJitFuseLastCompileCount >= WASM_JIT_FUSE_COLD_CODE_COMPILES;
+      if (!coldCode) {
+        catastrophic = coreFps < WASM_JIT_ABSOLUTE_FLOOR_FPS;
+        regressed =
+          ppcWasmJitPreEngageCoreFps >= WASM_JIT_REGRESSION_MIN_BASELINE_FPS &&
+          coreFps < ppcWasmJitPreEngageCoreFps * WASM_JIT_REGRESSION_FRACTION;
+      }
       ppcWasmJitFuseLastFrame = cf;
       ppcWasmJitFuseLastTime = nowMs;
+      ppcWasmJitFuseLastCompileCount = compileCount;
     }
   } else {
     ppcWasmJitFuseLastFrame = cf;
     ppcWasmJitFuseLastTime = nowMs;
+    ppcWasmJitFuseLastCompileCount = compileCount;
   }
 
   if (!regressed && !catastrophic) {
