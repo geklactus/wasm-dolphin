@@ -1,3 +1,4 @@
+import { rendererFeatureOverridesFromSearch } from "./game-profiles.js";
 import { DolphinCoreAdapter, dolphinBundleAvailable } from "./dolphin-adapter.js";
 import { buttonMaskFromPressed } from "./input.js";
 import { UpstreamMainThreadAdapter } from "./upstream-main-thread-adapter.js";
@@ -111,6 +112,11 @@ export class EmulatorHost {
     this.wgpuScissoredClearRect = requestedWgpuScissoredClearRect(
       this.cachedInterpreterDisableMask
     );
+    // Renderer feature bits from the URL (?wgpureadback=1, ?wgpuzcomploc=0, ...)
+    // win over the per-game profile; the profile itself arrives at mount time
+    // (applyGameProfile) and is baked into the worker's load payload.
+    this.rendererFeatureOverrides = rendererFeatureOverridesFromSearch(window.location.search);
+    this.gameProfile = null;
     this.noJitCache =
       new URLSearchParams(window.location.search).get("nojitcache") === "1";
     this.collectMetrics = requestedCollectMetrics();
@@ -332,7 +338,9 @@ export class EmulatorHost {
             presentationScale: this.presentationScale,
             oglTestClear: this.oglTestClear,
             fastSoftwareRaster: this.fastSoftwareRaster,
-            xfbFastPaths: this.xfbFastPaths
+            xfbFastPaths: this.xfbFastPaths,
+            gameProfile: this.gameProfile,
+            rendererFeatureOverrides: this.rendererFeatureOverrides
           })
         : this.coreKind === "upstream"
         ? new UpstreamWorkerAdapter({
@@ -393,6 +401,8 @@ export class EmulatorHost {
             frameCap: this.frameCap,
             cachedInterpreterDisableMask: this.cachedInterpreterDisableMask,
             wgpuScissoredClearRect: this.wgpuScissoredClearRect,
+            gameProfile: this.gameProfile,
+            rendererFeatureOverrides: this.rendererFeatureOverrides,
             noJitCache: this.noJitCache,
             collectMetrics: this.collectMetrics,
             legacyOneWayAck: this.legacyOneWayAck,
@@ -532,6 +542,19 @@ export class EmulatorHost {
       this.adapter.ppcWasmJitWarmupFrames = this.ppcWasmJitWarmupFrames;
       this.adapter.presentationPacing = this.presentationPacing;
       this.adapter.wgpuVisualCadence = this.wgpuVisualCadence;
+    }
+    return true;
+  }
+
+  // Hand the worker the per-game profile payload (src/game-profiles.js:
+  // gameProfilePayload): upstream's GameSettings lines to write before boot and
+  // the renderer feature bits. Like applyVideoBackend, only up to the first
+  // load -- the payload travels with the core's load message.
+  applyGameProfile(payload) {
+    this.gameProfile = payload ?? null;
+    if (this.adapter) {
+      if (this.adapter.loaded) return false;
+      this.adapter.gameProfile = this.gameProfile;
     }
     return true;
   }

@@ -1,0 +1,811 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasm-dolphin patch snapshot <snapshot@local.invalid>
+Date: Fri, 23 Oct 2026 11:17:35 +0000
+Subject: [PATCH] 0074-webgpu-readback-and-per-game-capabilities
+
+
+diff --git a/Source/Core/VideoBackends/WebGPU/CMakeLists.txt b/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
+index 9acc9c20bf..caad1f32a3 100644
+--- a/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
++++ b/Source/Core/VideoBackends/WebGPU/CMakeLists.txt
+@@ -11,6 +11,11 @@ add_library(videowebgpu
+   WebGPUVertexManager.h
+   WebGPUTexture.cpp
+   WebGPUTexture.h
++  WebGPUBoundingBox.cpp
++  WebGPUBoundingBox.h
++  WebGPUReadback.cpp
++  WebGPUReadback.h
++  WebGPURendererFeatures.h
+   WebGPUUboPacket.h
+ )
+ 
+diff --git a/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp b/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
+index 358640fae0..143e7f89b6 100644
+--- a/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
++++ b/Source/Core/VideoBackends/WebGPU/VideoBackend.cpp
+@@ -20,7 +20,9 @@
+ #include "Common/Common.h"
+ #include "Common/Logging/Log.h"
+ 
++#include "VideoBackends/WebGPU/WebGPUBoundingBox.h"
+ #include "VideoBackends/WebGPU/WebGPUGfx.h"
++#include "VideoBackends/WebGPU/WebGPURendererFeatures.h"
+ #include "VideoBackends/WebGPU/WebGPUShaderTranslator.h"
+ #include "VideoBackends/WebGPU/WebGPUVertexManager.h"
+ 
+@@ -76,7 +78,19 @@ void VideoBackend::InitBackendInfo(const WindowSystemInfo& /* wsi */)
+   // uses the single-output path. (Was copied true from Software's
+   // InitBackendInfo; wrong for WebGPU.)
+   g_backend_info.bSupportsDualSourceBlend = false;
+-  g_backend_info.bSupportsEarlyZ = true;
++  // Capabilities that depend on the renderer feature mask the host set before
++  // boot (WebGPURendererFeatures.h; src/game-profiles.js decides per title).
++  // Read here, in InitBackendInfo, which Core::EmuThread calls on every boot
++  // after the host's setters have run.
++  const unsigned int renderer_features = DolphinWeb_GetRendererFeatureMask();
++  // Early-Z: the shader translator (Naga, WGSL out) has no spelling for the
++  // EarlyFragmentTests execution mode, so a FORCE_EARLY_Z the generators emit
++  // is dropped silently and a discarded fragment loses its depth write.
++  // Reporting it anyway was dishonest; with the zcomploc-hack bit (default
++  // on) VideoCommon runs the same fallback upstream uses on backends without
++  // early-Z. Clearing the bit restores the old claim for bisection.
++  g_backend_info.bSupportsEarlyZ =
++      (renderer_features & DOLPHIN_WEB_RENDERER_FEATURE_ZCOMPLOC_HACK) == 0;
+   g_backend_info.bSupportsPrimitiveRestart = false;
+   g_backend_info.bSupportsMultithreading = false;
+   g_backend_info.bSupportsComputeShaders = false;
+@@ -100,10 +114,20 @@ void VideoBackend::InitBackendInfo(const WindowSystemInfo& /* wsi */)
+   g_backend_info.bSupportsPartialDepthCopies = false;
+   g_backend_info.bSupportsFramebufferFetch = false;
+   g_backend_info.bSupportsBackgroundCompiling = false;
+-  g_backend_info.bSupportsLogicOp = true;
++  // Logic ops: WebGPU has none. Reporting false (default) lets VideoCommon
++  // approximate them with blending, with the shader help it can add for the
++  // modes blending cannot express; the producer's own approximation ran too
++  // late for that. Clearing the bit restores the old producer-side path.
++  g_backend_info.bSupportsLogicOp =
++      (renderer_features & DOLPHIN_WEB_RENDERER_FEATURE_LOGIC_OP_IN_VIDEOCOMMON) == 0;
+   g_backend_info.bSupportsShaderBinaries = false;
+   g_backend_info.bSupportsPipelineCacheData = false;
+-  g_backend_info.bSupportsBBox = true;
++  // Bounding box: real only with GPU readback (WebGPUBoundingBox reads the
++  // storage buffer the shaders update). Without it VideoCommon serves the
++  // game's own values back, which is what the Software-rasteriser bbox
++  // object reported here anyway since no rasteriser ever updated it.
++  g_backend_info.bSupportsBBox =
++      (renderer_features & DOLPHIN_WEB_RENDERER_FEATURE_READBACK) != 0;
+   g_backend_info.bSupportsCoarseDerivatives = false;
+   g_backend_info.bSupportsTextureQueryLevels = false;
+   g_backend_info.bSupportsLodBiasInSampler = false;
+@@ -309,13 +333,14 @@ bool VideoBackend::Initialize(const WindowSystemInfo& /* wsi */)
+   // generic HardwareEFBInterface + TextureCacheBase (both drive the
+   // real AbstractGfx path we now record as opcodes). The real
+   // VertexManager replaces SWVertexLoader; Clipper/Rasterizer/
+-  // SWEFBInterface/SW::TextureCache are gone. SWBoundingBox stays as
+-  // the bbox impl for now (self-contained CPU bbox, not the
+-  // rasteriser; a GPU bbox is a post-cutover refinement).
++  // SWEFBInterface/SW::TextureCache are gone. SWBoundingBox served as the
++  // bbox object until the readback feature made a GPU one possible.
++  // The bounding box is the GPU one (storage buffer + readback); it is only
++  // consulted when bSupportsBBox is reported, i.e. with the readback feature.
+   return InitializeShared(std::make_unique<WebGPUGfx>(),
+                           std::make_unique<WebGPU::VertexManager>(),
+                           std::make_unique<PerfQueryBase>(),
+-                          std::make_unique<SW::SWBoundingBox>());
++                          std::make_unique<WebGPUBoundingBox>());
+ }
+ 
+ void VideoBackend::Shutdown()
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.cpp
+new file mode 100644
+index 0000000000..eda89aaec6
+--- /dev/null
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.cpp
+@@ -0,0 +1,73 @@
++// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "VideoBackends/WebGPU/WebGPUBoundingBox.h"
++
++#include <algorithm>
++#include <cstring>
++
++#include "VideoBackends/WebGPU/WebGPUCommandStream.h"
++#include "VideoBackends/WebGPU/WebGPUGfx.h"
++#include "VideoBackends/WebGPU/WebGPURendererFeatures.h"
++#include "VideoCommon/AbstractGfx.h"
++
++namespace WebGPU
++{
++std::vector<BBoxType> WebGPUBoundingBox::Read(u32 index, u32 length)
++{
++  std::vector<BBoxType> values(length);
++  if (length == 0 || index >= NUM_BBOX_VALUES)
++    return values;
++  length = std::min(length, NUM_BBOX_VALUES - index);
++
++  auto* gfx = static_cast<WebGPUGfx*>(g_gfx.get());
++  const u32 buffer = gfx ? gfx->EnsureBoundingBoxBuffer() : 0;
++  if (buffer != 0 && RendererFeatureEnabled(DOLPHIN_WEB_RENDERER_FEATURE_READBACK))
++  {
++    // The shaders that update the buffer ran in the pass being recorded.
++    gfx->EndPassForImmediateOp();
++    const u32 serial = ArmReadback(m_flag);
++    if (GetCommandStream().PushReadbackBuffer(
++            buffer, index * sizeof(BBoxType), length * sizeof(BBoxType),
++            HeapPointer(&m_readback[index]), HeapPointer(&m_flag)) &&
++        WebGPU::WaitForReadback(m_flag, serial))
++    {
++      for (u32 i = 0; i < length; i++)
++        m_shadow[index + i] = m_readback[index + i];
++    }
++    else
++    {
++      m_flag.expected.store(0, std::memory_order_release);
++      CountSkippedReadback();
++    }
++  }
++  else
++  {
++    CountSkippedReadback();
++  }
++  for (u32 i = 0; i < length; i++)
++    values[i] = m_shadow[index + i];
++  return values;
++}
++
++void WebGPUBoundingBox::Write(u32 index, std::span<const BBoxType> values)
++{
++  if (values.empty() || index >= NUM_BBOX_VALUES)
++    return;
++  const u32 length = std::min<u32>(static_cast<u32>(values.size()), NUM_BBOX_VALUES - index);
++  for (u32 i = 0; i < length; i++)
++    m_shadow[index + i] = values[i];
++
++  auto* gfx = static_cast<WebGPUGfx*>(g_gfx.get());
++  const u32 buffer = gfx ? gfx->EnsureBoundingBoxBuffer() : 0;
++  if (buffer == 0)
++    return;
++  WebGPUCommandStream& cs = GetCommandStream();
++  const u32 src = cs.UploadAlloc(values.data(), length * sizeof(BBoxType), 4);
++  if (src != 0)
++  {
++    cs.PushUploadBuffer(buffer, index * sizeof(BBoxType), src, length * sizeof(BBoxType),
++                        BufferUploadRole::Utility);
++  }
++}
++}  // namespace WebGPU
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h b/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h
+index cfa8c16a2c..1286087d2d 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUBoundingBox.h
+@@ -3,25 +3,39 @@
+ 
+ #pragma once
+ 
++#include <array>
++#include <span>
++#include <vector>
++
+ #include "Common/CommonTypes.h"
+ 
++#include "VideoBackends/WebGPU/WebGPUReadback.h"
+ #include "VideoCommon/BoundingBox.h"
+ 
+ namespace WebGPU
+ {
++// Bounding box over the storage buffer the pixel shaders atomically update
++// (WebGPUGfx bind group 2, binding 0). Write uploads the game's values into
++// it; Read copies the four words back into the heap through
++// CmdOp::ReadbackBuffer and waits for the consumer, like every other
++// hardware backend waits for its GPU. Only reached when the readback feature
++// is on: VideoBackend reports bSupportsBBox from that bit, and VideoCommon
++// falls back to the game's own values otherwise.
+ class WebGPUBoundingBox final : public BoundingBox
+ {
+ public:
+   bool Initialize() override { return true; }
+ 
+ protected:
+-  // Day-14 scaffold: no GPU storage; reads always zero. Real BBox
+-  // support needs a storage buffer + readback path under WebGPU.
+-  std::vector<BBoxType> Read(u32 /* index */, u32 length) override
+-  {
+-    return std::vector<BBoxType>(length);
+-  }
+-  void Write(u32 /* index */, std::span<const BBoxType> /* values */) override {}
++  std::vector<BBoxType> Read(u32 index, u32 length) override;
++  void Write(u32 index, std::span<const BBoxType> values) override;
++
++private:
++  // The consumer stores into m_readback; stable address for the object's life.
++  alignas(16) std::array<BBoxType, NUM_BBOX_VALUES> m_readback{};
++  // Last values seen (written or read), served when the GPU cannot be asked.
++  std::array<BBoxType, NUM_BBOX_VALUES> m_shadow{};
++  WebGPUReadbackFlag m_flag;
+ };
+ 
+ }  // namespace WebGPU
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
+index f1ecf610fe..7fa1f472ae 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.cpp
+@@ -1470,6 +1470,54 @@ bool WebGPUCommandStream::PushBlitTexture(u32 src_id, u32 dst_id, u32 src_x, u32
+   return Push(rec);
+ }
+ 
++bool WebGPUCommandStream::PushReadbackTexture(u32 tex_id, u32 x, u32 y, u32 w, u32 h,
++                                              u32 layer, u32 level, u32 texel_size,
++                                              u32 dst_heap_ptr, u32 dst_stride,
++                                              u32 flag_heap_ptr)
++{
++  if (!m_header || tex_id == 0 || w == 0 || h == 0 || texel_size == 0 || texel_size > 0xFFu ||
++      dst_heap_ptr == 0 || flag_heap_ptr == 0)
++    return false;
++  // Like BLIT_TEXTURE: an immediate encoder operation cannot execute ahead
++  // of an unpublished pass that produces its source. Callers end the open
++  // pass first (WebGPUGfx::EndPassForImmediateOp); this is the backstop.
++  if (m_pass_staging)
++  {
++    PoisonPass();
++    return false;
++  }
++  CmdRecord rec{};
++  rec.op = static_cast<u32>(CmdOp::ReadbackTexture);
++  rec.arg.u[0] = tex_id;
++  rec.arg.u[1] = Pack16(x, y);
++  rec.arg.u[2] = Pack16(w, h);
++  rec.arg.u[3] = (layer & 0xFFu) | ((level & 0xFFu) << 8) | ((texel_size & 0xFFu) << 16);
++  rec.arg.u[4] = dst_heap_ptr;
++  rec.arg.u[5] = dst_stride;
++  rec.arg.u[6] = flag_heap_ptr;
++  return Push(rec);
++}
++
++bool WebGPUCommandStream::PushReadbackBuffer(u32 buf_id, u32 src_offset, u32 len,
++                                             u32 dst_heap_ptr, u32 flag_heap_ptr)
++{
++  if (!m_header || buf_id == 0 || len == 0 || dst_heap_ptr == 0 || flag_heap_ptr == 0)
++    return false;
++  if (m_pass_staging)
++  {
++    PoisonPass();
++    return false;
++  }
++  CmdRecord rec{};
++  rec.op = static_cast<u32>(CmdOp::ReadbackBuffer);
++  rec.arg.u[0] = buf_id;
++  rec.arg.u[1] = src_offset;
++  rec.arg.u[2] = len;
++  rec.arg.u[3] = dst_heap_ptr;
++  rec.arg.u[4] = flag_heap_ptr;
++  return Push(rec);
++}
++
+ WebGPUCommandStream& GetCommandStream()
+ {
+   static WebGPUCommandStream s_stream;
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
+index 7564fc15d8..1529b6ac06 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h
+@@ -137,6 +137,21 @@ enum class CmdOp : u32
+   //   flags: 8=explicit channel mask, 1=RGB, 2=depth, 4=alpha.
+   //   Without flag 8, legacy flag 1 enables all RGBA channels.
+   ClearRect = 25,
++  // GPU -> CPU readback of a texture rectangle into the wasm heap. The
++  // consumer ends any open pass, copies the rect into a MAP_READ buffer,
++  // submits, and after mapAsync resolves writes h rows of w*texelSize bytes
++  // to dstHeapPtr with dstStride between rows, then stores the serial it read
++  // from flagHeapPtr[1] into flagHeapPtr[0] and notifies. The video thread
++  // waits on flagHeapPtr[0] (WebGPUStagingTexture::Flush). Immediate encoder
++  // op like BlitTexture: never executes ahead of an unpublished pass.
++  //   u0=texId u1=(x|y<<16) u2=(w|h<<16)
++  //   u3=(layer | level<<8 | texelSize<<16)
++  //   u4=dstHeapPtr u5=dstStride u6=flagHeapPtr
++  ReadbackTexture = 26,
++  // GPU -> CPU readback of a buffer range into the wasm heap, same completion
++  // protocol as ReadbackTexture (bounding box).
++  //   u0=bufId u1=srcOffset u2=len u3=dstHeapPtr u4=flagHeapPtr
++  ReadbackBuffer = 27,
+ };
+ 
+ // Stable producer attribution for UploadBuffer records. The value is carried
+@@ -397,6 +412,15 @@ public:
+                        u32 src_h, u32 dst_x, u32 dst_y, u32 dst_w, u32 dst_h,
+                        u32 src_layer, u32 src_level, u32 dst_layer, u32 dst_level);
+ 
++  // GPU readback into the wasm heap (see CmdOp::ReadbackTexture /
++  // ReadbackBuffer for the record layout and completion protocol). No-op
++  // (false) if the ring is not live, an id is 0, or the rect is empty.
++  bool PushReadbackTexture(u32 tex_id, u32 x, u32 y, u32 w, u32 h, u32 layer, u32 level,
++                           u32 texel_size, u32 dst_heap_ptr, u32 dst_stride,
++                           u32 flag_heap_ptr);
++  bool PushReadbackBuffer(u32 buf_id, u32 src_offset, u32 len, u32 dst_heap_ptr,
++                          u32 flag_heap_ptr);
++
+   // Discard the current staged pass without publishing BEGIN_PASS or any of
+   // its state/draw records. Safe to call redundantly.
+   void AbortPass();
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+index 46d41b1547..02567d13d5 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp
+@@ -40,18 +40,15 @@
+ 
+ #include <algorithm>
+ 
+-// Renderer feature mask. ENABLE polarity, and DEFAULT ON: the renderer is
+-// correct out of the box even if the host never calls the setter. This used to
+-// ride on the cached-interpreter *disable* mask, which was doubly confusing --
+-// an enable bit transported through a disable word, on a CPU knob unrelated to
+-// the renderer. It is its own capability now.
+-//
+-// Bit 0: partial and independent-channel EFB clears are emitted as a scissored
+-// solid-quad draw inside the open pass (CmdOp::ClearRect) instead of a
+-// whole-attachment loadOp clear. Mario Kart Wii does not render without it.
+-static constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_SCISSORED_CLEAR_RECT = 1u << 0;
+-static constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_DEFAULT =
+-    DOLPHIN_WEB_RENDERER_FEATURE_SCISSORED_CLEAR_RECT;
++// Renderer feature mask. ENABLE polarity, and the bits that are correct for
++// every title default ON, so the renderer is right out of the box even if the
++// host never calls the setter. This used to ride on the cached-interpreter
++// *disable* mask, which was doubly confusing -- an enable bit transported
++// through a disable word, on a CPU knob unrelated to the renderer. It is its
++// own capability now. The bits and their defaults are declared in
++// WebGPURendererFeatures.h so VideoBackend.cpp (capability flags) and
++// WebGPUTexture.cpp (readback) read the same definitions.
++#include "VideoBackends/WebGPU/WebGPURendererFeatures.h"
+ 
+ static std::atomic<unsigned int> s_dolphin_web_renderer_feature_mask{
+     DOLPHIN_WEB_RENDERER_FEATURE_DEFAULT};
+@@ -1672,8 +1669,10 @@ bool WebGPUGfx::PrepareDrawResources()
+     if (m_ubo_ring == 0)
+       m_ubo_ring = m_cmd_stream.PushCreateBuffer(kUboRingSize, kUsageUniform,
+                                                  BufferResourceRole::UboRing);
++    // COPY_SRC (0x4) as well: WebGPUBoundingBox reads the four values back
++    // through CmdOp::ReadbackBuffer when the readback feature is on.
+     if (m_ssbo_bbox == 0)
+-      m_ssbo_bbox = m_cmd_stream.PushCreateBuffer(16u, kUsageStorage);
++      m_ssbo_bbox = m_cmd_stream.PushCreateBuffer(16u, kUsageStorage | 0x4u);
+     if (m_dummy_tex == 0)
+       m_dummy_tex = m_cmd_stream.PushCreateTexture(1, 1, 0, 1u | 2u | 4u | 0x10u);
+   }
+@@ -2276,6 +2275,24 @@ void WebGPUGfx::SetAndDiscardFramebuffer(AbstractFramebuffer* framebuffer)
+   SetFramebuffer(framebuffer);
+ }
+ 
++void WebGPUGfx::EndPassForImmediateOp()
++{
++  EndPassIfOpen();
++}
++
++u32 WebGPUGfx::EnsureBoundingBoxBuffer()
++{
++  if (m_ssbo_bbox != 0)
++    return m_ssbo_bbox;
++  m_cmd_stream.EnsureRing();
++  if (!m_cmd_stream.ready())
++    return 0;
++  // Same buffer the lazy draw-resource init creates (STORAGE | COPY_DST, plus
++  // COPY_SRC for ReadbackBuffer), so whichever path runs first owns it.
++  m_ssbo_bbox = m_cmd_stream.PushCreateBuffer(16u, kUsageStorage | 0x4u);
++  return m_ssbo_bbox;
++}
++
+ void WebGPUGfx::SetAndClearFramebuffer(AbstractFramebuffer* framebuffer,
+                                        const ClearColor& color_value, float /* depth_value */)
+ {
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
+index f01cf906f1..848fcf9c17 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUGfx.h
+@@ -55,6 +55,18 @@ public:
+   // EFB-copy textures → every textured draw that samples them is black.
+   void UploadUtilityUniforms(const void* data, u32 size);
+ 
++  // Immediate encoder operations (ReadbackTexture / ReadbackBuffer, like
++  // BlitTexture) cannot execute ahead of a pass that is still being recorded,
++  // so publish it first. VideoCommon issues a staging copy from inside
++  // BeginUtilityDrawing..EndUtilityDrawing (TextureCacheBase::CopyEFB) and
++  // from inside the EFB pass (FramebufferManager::PopulateEFBCache); the
++  // pass reopens lazily on the next draw with loadOp=load, exactly as after
++  // an EFB-to-VRAM copy. Also kept in sync with the cached viewport/scissor.
++  void EndPassForImmediateOp();
++  // The bounding-box storage buffer the pixel shaders atomically update
++  // (bind group 2, binding 0); created on demand. 0 if the ring is not live.
++  u32 EnsureBoundingBoxBuffer();
++
+   std::unique_ptr<AbstractTexture> CreateTexture(const TextureConfig& config,
+                                                  std::string_view name) override;
+   std::unique_ptr<AbstractStagingTexture>
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUReadback.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUReadback.cpp
+new file mode 100644
+index 0000000000..cd5e8e63b6
+--- /dev/null
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUReadback.cpp
+@@ -0,0 +1,78 @@
++// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "VideoBackends/WebGPU/WebGPUReadback.h"
++
++#include <chrono>
++
++#include <emscripten/emscripten.h>
++#include <emscripten/threading.h>
++
++namespace WebGPU
++{
++namespace
++{
++WebGPUReadbackStats s_stats;
++u32 s_serial = 0;
++
++// The consumer drains the ring on its presentation tick and replay pump, maps
++// the readback buffer asynchronously, and copies on the next event-loop turn.
++// One frame of latency is normal; a quarter of a second means the consumer is
++// not coming (device lost, page hidden, replay fatal), and the video thread
++// must not hang the core on it.
++constexpr double kReadbackTimeoutMs = 250.0;
++constexpr double kFutexSliceMs = 2.0;
++}  // namespace
++
++u32 ArmReadback(WebGPUReadbackFlag& flag)
++{
++  u32 serial = ++s_serial;
++  if (serial == 0)
++    serial = ++s_serial;
++  flag.expected.store(serial, std::memory_order_release);
++  s_stats.requested++;
++  return serial;
++}
++
++bool WaitForReadback(WebGPUReadbackFlag& flag, u32 serial)
++{
++  const auto start = std::chrono::steady_clock::now();
++  while (true)
++  {
++    const u32 done = flag.done.load(std::memory_order_acquire);
++    if (done == serial)
++    {
++      s_stats.completed++;
++      return true;
++    }
++    const double waited_ms =
++        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
++            .count();
++    if (waited_ms >= kReadbackTimeoutMs)
++      break;
++    emscripten_futex_wait(reinterpret_cast<volatile void*>(&flag.done), done, kFutexSliceMs);
++  }
++  s_stats.timed_out++;
++  if (s_stats.timed_out <= 4 || (s_stats.timed_out % 256) == 0)
++  {
++    EM_ASM(
++        {
++          if (typeof console !== 'undefined')
++            console.log('[webgpu-readback] timed out waiting for the consumer (serial ' + $0 +
++                        ', timeouts ' + $1 + ' of ' + $2 + ' requests)');
++        },
++        serial, s_stats.timed_out, s_stats.requested);
++  }
++  return false;
++}
++
++const WebGPUReadbackStats& GetReadbackStats()
++{
++  return s_stats;
++}
++
++void CountSkippedReadback()
++{
++  s_stats.skipped++;
++}
++}  // namespace WebGPU
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUReadback.h b/Source/Core/VideoBackends/WebGPU/WebGPUReadback.h
+new file mode 100644
+index 0000000000..93bbad5428
+--- /dev/null
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUReadback.h
+@@ -0,0 +1,52 @@
++// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <atomic>
++
++#include "Common/CommonTypes.h"
++
++namespace WebGPU
++{
++// Completion word pair for a GPU -> heap readback (CmdOp::ReadbackTexture /
++// ReadbackBuffer). Lives inside the requesting object, so its address is
++// stable for as long as the request can complete:
++//   expected -- the serial of the request in flight, stored by the producer
++//               (video thread) before the record is pushed;
++//   done     -- stored by the JS consumer, with the serial it read from
++//               `expected` at replay time, after the mapped bytes have been
++//               copied into the heap; then Atomics.notify'd.
++// A serial rather than a boolean, so a completion that arrives after the
++// producer gave up on it (timeout) can never satisfy the next request.
++struct alignas(8) WebGPUReadbackFlag
++{
++  std::atomic<u32> done{0};
++  std::atomic<u32> expected{0};
++};
++
++// Arms `flag` for a new request and returns the serial to wait for.
++u32 ArmReadback(WebGPUReadbackFlag& flag);
++
++// Waits (futex, bounded) until the consumer completes the armed request.
++// Returns false on timeout, in which case the destination holds whatever it
++// held before (zeros for a fresh staging buffer). Logs the first few
++// timeouts to the console so a stuck consumer is visible, and counts them.
++bool WaitForReadback(WebGPUReadbackFlag& flag, u32 serial);
++
++// Readback statistics, for the status line and the bug log.
++struct WebGPUReadbackStats
++{
++  u32 requested = 0;
++  u32 completed = 0;
++  u32 timed_out = 0;
++  u32 skipped = 0;  // feature off, ring not live, or empty request
++};
++const WebGPUReadbackStats& GetReadbackStats();
++void CountSkippedReadback();
++
++inline u32 HeapPointer(const void* p)
++{
++  return static_cast<u32>(reinterpret_cast<uintptr_t>(p));
++}
++}  // namespace WebGPU
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h b/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h
+new file mode 100644
+index 0000000000..f6a99da518
+--- /dev/null
++++ b/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h
+@@ -0,0 +1,61 @@
++// Copyright 2026 Dolphin Emulator Project (wasm-dolphin fork)
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++// Renderer feature mask for the WebGPU backend. ENABLE polarity: a set bit
++// turns the feature on. The storage and the exported accessors live in
++// WebGPUGfx.cpp; the host sets the mask before the core boots, and the
++// per-game profile table in src/game-profiles.js decides which bits a title
++// gets. Every bit here is a choice between two ways of serving VideoCommon,
++// so each one is documented against what upstream's other backends do.
++
++// Bit 0: partial and independent-channel EFB clears are emitted as a scissored
++// solid-quad draw inside the open pass (CmdOp::ClearRect) instead of a
++// whole-attachment loadOp clear. Mario Kart Wii does not render without it.
++inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_SCISSORED_CLEAR_RECT = 1u << 0;
++
++// Bit 1: report no early-Z support, so VideoCommon applies its zcomploc hack
++// (PipelineUtils.cpp: alpha test forced to pass on zcomploc draws that write
++// depth) instead of emitting FORCE_EARLY_Z. The shader path here is
++// GLSL -> SPIR-V -> Naga -> WGSL, and Naga's WGSL writer has no spelling for
++// the EarlyFragmentTests execution mode (WGSL has none), so the mode is
++// dropped silently: a discarded fragment then skips its depth write, which
++// is the exact failure FORCE_EARLY_Z exists to prevent. Upstream backends
++// without early-Z (GLES without the extension, old D3D) run the same hack.
++inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_ZCOMPLOC_HACK = 1u << 1;
++
++// Bit 2: report no logic-op support, so VideoCommon approximates logic ops
++// with blending itself (ShaderCache.cpp / PipelineUtils.cpp), including the
++// shader-side help for the modes blending alone cannot express. WebGPU has no
++// logic ops; the producer used to approximate on its own copy of the blend
++// state after the shader was already generated, so that help was never
++// available. This is what the Metal and GLES backends report.
++inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_LOGIC_OP_IN_VIDEOCOMMON = 1u << 2;
++
++// Bit 3: GPU readback. Staging textures copy their texels back into the wasm
++// heap (CmdOp::ReadbackTexture) and the bounding-box storage buffer is read
++// (CmdOp::ReadbackBuffer), with the video thread waiting on a heap flag the
++// consumer sets after mapAsync resolves. This is what makes EFB copies to RAM
++// (EFBToTextureEnable = False in upstream's GameSettings), EFB peeks and the
++// bounding box real on this backend; without it they read back zeros, which
++// is what every title in upstream's "needs EFB to RAM" list saw here. Off by
++// default because every readback is a pipeline stall the title must be shown
++// to need; src/game-profiles.js turns it on per game.
++inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_READBACK = 1u << 3;
++
++inline constexpr unsigned int DOLPHIN_WEB_RENDERER_FEATURE_DEFAULT =
++    DOLPHIN_WEB_RENDERER_FEATURE_SCISSORED_CLEAR_RECT |
++    DOLPHIN_WEB_RENDERER_FEATURE_ZCOMPLOC_HACK |
++    DOLPHIN_WEB_RENDERER_FEATURE_LOGIC_OP_IN_VIDEOCOMMON;
++
++extern "C" unsigned int DolphinWeb_SetRendererFeatureMask(unsigned int mask);
++extern "C" unsigned int DolphinWeb_GetRendererFeatureMask();
++
++namespace WebGPU
++{
++inline bool RendererFeatureEnabled(unsigned int bit)
++{
++  return (DolphinWeb_GetRendererFeatureMask() & bit) != 0;
++}
++}  // namespace WebGPU
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp
+index 2a52e7dec8..6bfa8cb025 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.cpp
+@@ -7,6 +7,10 @@
+ #include <cstring>
+ 
+ #include "VideoBackends/WebGPU/WebGPUCommandStream.h"
++#include "VideoBackends/WebGPU/WebGPUGfx.h"
++#include "VideoBackends/WebGPU/WebGPURendererFeatures.h"
++
++#include "VideoCommon/AbstractGfx.h"
+ 
+ namespace WebGPU
+ {
+@@ -204,23 +208,76 @@ u8* WebGPUTexture::GetData(u32 layer, u32 level)
+ WebGPUStagingTexture::WebGPUStagingTexture(StagingTextureType type, const TextureConfig& config)
+     : AbstractStagingTexture(type, config)
+ {
+-  // Provide a host-readable buffer so any incidental readback through
+-  // the AbstractStagingTexture interface produces zero-filled pixels
+-  // (rather than reading uninitialized memory). Real WebGPU storage
+-  // comes later.
++  // The host-readable buffer is the map target. It is sized once and never
++  // resized, so its address is stable: the consumer writes readback texels
++  // straight into it (see CopyFromTexture). Zero-filled until a readback
++  // lands, which is also what every read returns with the readback feature
++  // off.
+   m_buffer.resize(m_texel_size * config.width * config.height);
+   m_map_pointer = reinterpret_cast<char*>(m_buffer.data());
+   m_map_stride = m_texel_size * config.width;
+ }
+ 
+-WebGPUStagingTexture::~WebGPUStagingTexture() = default;
++WebGPUStagingTexture::~WebGPUStagingTexture()
++{
++  // A completion still in flight would store into freed memory. Wait it out
++  // (bounded) rather than race it; the pool normally recycles these, so this
++  // is the shutdown path only.
++  if (m_readback_pending)
++    WaitForReadback();
++}
+ 
+-void WebGPUStagingTexture::CopyFromTexture(const AbstractTexture* /* src */,
+-                                           const MathUtil::Rectangle<int>& /* src_rect */,
+-                                           u32 /* src_layer */, u32 /* src_level */,
+-                                           const MathUtil::Rectangle<int>& /* dst_rect */)
++void WebGPUStagingTexture::CopyFromTexture(const AbstractTexture* src,
++                                           const MathUtil::Rectangle<int>& src_rect,
++                                           u32 src_layer, u32 src_level,
++                                           const MathUtil::Rectangle<int>& dst_rect)
+ {
+   m_needs_flush = true;
++  if (!RendererFeatureEnabled(DOLPHIN_WEB_RENDERER_FEATURE_READBACK) || !src)
++  {
++    CountSkippedReadback();
++    return;
++  }
++  // A readback still in flight for this buffer would race the new one on the
++  // same bytes; drain it first (bounded).
++  if (m_readback_pending)
++    WaitForReadback();
++
++  const u32 src_id = static_cast<const WebGPUTexture*>(src)->GetBridgeId();
++  const int width = std::min(src_rect.GetWidth(), dst_rect.GetWidth());
++  const int height = std::min(src_rect.GetHeight(), dst_rect.GetHeight());
++  if (src_id == 0 || width <= 0 || height <= 0 || src_rect.left < 0 || src_rect.top < 0 ||
++      dst_rect.left < 0 || dst_rect.top < 0 ||
++      static_cast<u32>(dst_rect.left + width) > m_config.width ||
++      static_cast<u32>(dst_rect.top + height) > m_config.height)
++  {
++    CountSkippedReadback();
++    return;
++  }
++
++  // The source may be the framebuffer of the pass being recorded (the EFB
++  // for a peek, the encoding target for a copy to RAM). Publish that pass
++  // first; the readback is an immediate encoder operation.
++  if (auto* gfx = static_cast<WebGPUGfx*>(g_gfx.get()))
++    gfx->EndPassForImmediateOp();
++
++  u8* dst = m_buffer.data() + static_cast<size_t>(dst_rect.top) * m_map_stride +
++            static_cast<size_t>(dst_rect.left) * m_texel_size;
++  const u32 serial = ArmReadback(m_flag);
++  if (!GetCommandStream().PushReadbackTexture(
++          src_id, static_cast<u32>(src_rect.left), static_cast<u32>(src_rect.top),
++          static_cast<u32>(width), static_cast<u32>(height), src_layer, src_level,
++          static_cast<u32>(m_texel_size), HeapPointer(dst), static_cast<u32>(m_map_stride),
++          HeapPointer(&m_flag)))
++  {
++    // Not pushed: nothing will ever complete this serial. Leave the buffer as
++    // it was and do not wait for it.
++    m_flag.expected.store(0, std::memory_order_release);
++    CountSkippedReadback();
++    return;
++  }
++  m_readback_pending = true;
++  (void)serial;
+ }
+ 
+ void WebGPUStagingTexture::CopyToTexture(const MathUtil::Rectangle<int>& /* src_rect */,
+@@ -228,11 +285,18 @@ void WebGPUStagingTexture::CopyToTexture(const MathUtil::Rectangle<int>& /* src_
+                                           const MathUtil::Rectangle<int>& /* dst_rect */,
+                                           u32 /* dst_layer */, u32 /* dst_level */)
+ {
++  // Upload direction (EFB pokes go through FlushEFBPokes draws instead, so
++  // VideoCommon never needs this here). Unchanged from the stub.
+   m_needs_flush = true;
+ }
+ 
+ bool WebGPUStagingTexture::Map()
+ {
++  // Persistently mapped: the CPU buffer is the map. A readback in flight has
++  // to land before the caller reads texels (PrepareForAccess calls Flush
++  // first when m_needs_flush is set; Map alone must be safe too).
++  if (m_readback_pending)
++    WaitForReadback();
+   return true;
+ }
+ 
+@@ -242,9 +306,20 @@ void WebGPUStagingTexture::Unmap()
+ 
+ void WebGPUStagingTexture::Flush()
+ {
++  if (m_readback_pending)
++    WaitForReadback();
+   m_needs_flush = false;
+ }
+ 
++void WebGPUStagingTexture::WaitForReadback()
++{
++  const u32 serial = m_flag.expected.load(std::memory_order_acquire);
++  m_readback_pending = false;
++  if (serial == 0)
++    return;
++  WebGPU::WaitForReadback(m_flag, serial);
++}
++
+ WebGPUFramebuffer::WebGPUFramebuffer(AbstractTexture* color_attachment,
+                                      AbstractTexture* depth_attachment,
+                                      std::vector<AbstractTexture*> additional_color_attachments,
+diff --git a/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h
+index 396fe8e3e9..97044eeff3 100644
+--- a/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h
++++ b/Source/Core/VideoBackends/WebGPU/WebGPUTexture.h
+@@ -12,6 +12,8 @@
+ #include "VideoCommon/AbstractStagingTexture.h"
+ #include "VideoCommon/AbstractTexture.h"
+ 
++#include "VideoBackends/WebGPU/WebGPUReadback.h"
++
+ namespace WebGPU
+ {
+ // Day-17 phase 3: WebGPUTexture stores real pixel data CPU-side.
+@@ -57,6 +59,13 @@ private:
+   u32 m_bridge_id = 0;
+ };
+ 
++// Readback staging texture. The CPU-side buffer is the map target, as before;
++// with DOLPHIN_WEB_RENDERER_FEATURE_READBACK on, CopyFromTexture asks the
++// consumer to copy the GPU texels straight into it (CmdOp::ReadbackTexture)
++// and Flush/Map wait for the consumer's completion store on m_flag. With the
++// feature off the buffer stays zero-filled, which is the behaviour every
++// title had before: EFB copies to RAM, EFB peeks and the bounding box all
++// read zeros. See WebGPURendererFeatures.h.
+ class WebGPUStagingTexture final : public AbstractStagingTexture
+ {
+ public:
+@@ -74,7 +83,11 @@ public:
+   void Flush() override;
+ 
+ private:
++  void WaitForReadback();
++
+   std::vector<u8> m_buffer;
++  WebGPUReadbackFlag m_flag;
++  bool m_readback_pending = false;
+ };
+ 
+ class WebGPUFramebuffer final : public AbstractFramebuffer
