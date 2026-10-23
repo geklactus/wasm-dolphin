@@ -135,7 +135,7 @@ Ranked by whether the divergence can produce the observed split -- 2D correct,
 > and the core's was not: patch 0006 had gated VideoCommon's matching `1 - x`
 > conversions (fog, per-pixel depth, EFB depth copies, peeks/pokes, clear
 > values) off for this backend, leaving those inverted on the hardware path.
-> Vendor patch 0074 restores them, sends real clear depths instead of the
+> Vendor patch 0075 restores them, sends real clear depths instead of the
 > hard-coded `dcv = 0.0`, and carries inverted console depth ranges in the
 > vertex shader -- steps 1 (without depth clamp) and 2 of section 4, in
 > substance. The `mn > mx` swap and `REVZ_COMPARE_FLIP` stay, the latter being

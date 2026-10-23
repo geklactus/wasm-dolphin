@@ -6,9 +6,9 @@
 //
 // This backend stores reverse-Z window depth: 1 - console depth. The consumer
 // clears depth to 0.0 (the console's far, 0xFFFFFF) and flips every depth
-// compare. Cores from before vendor patch 0074 gave the consumer no clear depth
+// compare. Cores from before vendor patch 0075 gave the consumer no clear depth
 // it could use -- BEGIN_PASS carried none, CLEAR_RECT carried the raw console
-// value -- so the consumer hard-coded that far clear. Cores from 0074 on send
+// value -- so the consumer hard-coded that far clear. Cores from 0075 on send
 // the value in the window convention and flag it, so a game that clears to
 // anything but far (the console's own reverse-Z trick clears to 0) gets the
 // clear it asked for.

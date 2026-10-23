@@ -11,6 +11,115 @@ Reproduce:
 VIDEO=wgpu node tools/boot-matrix.mjs --library "<disc library>" --duration 45
 ```
 
+## Per-title causes read from the code (2026-10-23)
+
+This pass had no GPU and no discs, so nothing below is a screenshot claim. It
+is what the code says about why titles in `src/game-profiles.js` draw wrong on
+the hardware path, checked against how upstream's other backends handle the
+same cases, and what was changed for it. Every change is reachable from the
+profile table, and each title's entry names what to look at when it is
+checked by eye (the `test` field).
+
+### Upstream's per-game settings were never loaded
+
+`BootManager::BootCore` adds `ConfigLoaders::GenerateGlobalGameConfigLoader`,
+which reads `File::GetSysDirectory() + "GameSettings/<id>.ini"`. This build
+fixes the Sys directory at `/dolphin-sys` and embeds only `Data/Sys/Wii`
+(patch 0054), so `Data/Sys/GameSettings` does not exist in the wasm filesystem
+and **no title has ever had its upstream GameSettings applied, on either
+path**. For the library that means, among others:
+
+| title | upstream INI | what it says |
+| --- | --- | --- |
+| Super Mario Sunshine `GMSE01` | `GMS.ini` | `EFBToTextureEnable = False`, `EFBAccessEnable = True`, `MissingColorValue = 0` |
+| Resident Evil Code: Veronica X `GCDE08` | `GCD.ini` | `EFBToTextureEnable = False`, `SafeTextureCacheColorSamples = 512` |
+| Zelda OoT / Master Quest `D43E01` | `D43.ini` | `EFBToTextureEnable = False` |
+| Zelda Collector's Edition `PZLE01` | `PZL.ini` | `EFBToTextureEnable = False`, `ImmediateXFBEnable = False`, `SafeTextureCacheColorSamples = 0` |
+| Wind Waker `GZLE01` | `GZL.ini` | `EFBAccessEnable = True`, `EFBToTextureEnable = False`, `VISkip = False` |
+| Paper Mario TTYD `G8ME01` | `G8M.ini` | `EFBToTextureEnable = False`, `BBoxEnable = True`, `DeferEFBCopies = False` |
+| Pokemon Channel `GPAE01` | `GPA.ini` | `EFBToTextureEnable = False` |
+| Resident Evil Zero `GBZE08` | `GBZ.ini` | `XFBToTextureEnable = False` |
+| Four Swords Adventures `G4SE01` / Animal Crossing `GAFE01` | `G4S.ini` / `GAF.ini` | `SafeTextureCacheColorSamples = 512` |
+
+The profile table now carries those `[Video_*]` lines per title and the
+worker writes them to `/dolphin-sys/GameSettings/<id>.ini` before `BootDisc`,
+so Dolphin's own loader applies them. `[Core]` lines are deliberately not
+carried: F-Zero GX's upstream `CPUThread = False` would silently turn off the
+dual-core choice the host made.
+
+### EFB copies to RAM, EFB peeks and the bounding box read zeros
+
+The hardware path uses VideoCommon's generic `TextureCacheBase` (the
+`InitializeShared` overload without a texture cache), so a copy-to-RAM request
+already runs upstream's encoder draw and then calls
+`WebGPUStagingTexture::CopyFromTexture` -- which was a stub that set a flag.
+`Flush` and `Map` returned a zero-filled buffer. The same stub serves
+`FramebufferManager`'s EFB cache (peeks), and the bounding box object was the
+Software rasteriser's, which nothing on this path ever updated. So every
+title whose upstream INI says `EFBToTextureEnable = False` -- the game reads
+the copy back, or composes from it -- got zeros where the software path gets
+the real bytes. That is the shape of Code Veronica X's black screen, the N64
+emulator discs showing nothing, and Sunshine's goop maps; Paper Mario's paper
+effects additionally need the bbox.
+
+Fix: `CmdOp::ReadbackTexture` / `ReadbackBuffer` (patch 0074). The staging
+texture publishes the open pass, pushes a readback record naming its heap
+buffer and a serial, and futex-waits (bounded, 250 ms) on a completion word;
+the consumer copies the rect into a `MAP_READ` buffer, submits at once rather
+than at the next present, and after `mapAsync` resolves writes the rows into
+the heap and stores the serial. `WebGPUBoundingBox` uploads the game's values
+into the shader-updated storage buffer and reads it back the same way. It is
+behind renderer feature bit 3 (`readback`, `?wgpureadback=1`), off by
+default, and on in the profile of every title above whose upstream INI needs
+it -- a readback is a video-thread stall per copy, so it has to be earned.
+`ReinterpretPixelData` (EFB format changes, `EFBEmulateFormatChanges = True`
+for Mario Kart Wii and Skyward Sword) is still a stub.
+
+### `FORCE_EARLY_Z` is dropped by the shader translation
+
+`bSupportsEarlyZ = true` made `PixelShaderGen` emit `FORCE_EARLY_Z`
+(`layout(early_fragment_tests)`) for zcomploc draws that write depth. glslang
+turns that into the `EarlyFragmentTests` execution mode; Naga's SPIR-V front
+end parses it into `EarlyDepthTest::Force`, and Naga's WGSL back end has no
+spelling for it (`src/back/wgsl/` contains no early-depth handling; WGSL has
+none), so it is dropped silently. A fragment the alpha test discards then
+skips its depth write, which is exactly what the mode exists to prevent.
+Upstream's backends that cannot force early-Z report it, and
+`PipelineUtils.cpp` applies the zcomploc hack (the alpha test is forced to
+pass on those draws, since writing depth matters more than the alpha edge).
+Renderer feature bit 1 (`zcomplocHack`, default on) reports no early-Z so the
+same fallback runs here; `?wgpuzcomploc=0` restores the old claim.
+
+### Logic ops were approximated after shader generation
+
+`bSupportsLogicOp = true` while WebGPU has no logic ops: the producer called
+`BlendingState::ApproximateLogicOpWithBlending` on its own copy of the blend
+state after the pipeline was already generated. VideoCommon's own path for
+backends without logic ops (`ShaderCache.cpp`, `PipelineUtils.cpp`) does the
+same approximation but can also ask the pixel shader for help
+(`emulate_logic_op_with_blend`) for the modes blending cannot express, and
+that help was never available. Bit 2 (`logicOpInVideoCommon`, default on)
+reports no logic ops, as Metal and GLES do; the producer's approximation is
+then a no-op.
+
+### Entries whose reason was stale
+
+- `GHAE08`, `D43E01`, `G4SE01`: their "N vs M fps" reasons were measured with
+  the hardware visual-fps metric broken (issue #7, always 0) and the JIT
+  disable guard fusing the JIT off in heavy scenes (fixed 2026-08-30). The
+  later sweep boots RE2 and FSA at 100%. Entries keep software and say so.
+- `GRSEAF`: "does not progress" is the autosave dialog waiting for input (see
+  "Not bugs"), not a render fault.
+- `GMSE01`: the file-select background is claimed fixed by patches 0064/0065
+  (uniform-source leak); the entry now says what remains (EFB-to-RAM title).
+
+### What to test, and where it is written down
+
+The PR that lands this lists the titles to check in Chrome; the per-title
+`test` strings in `src/game-profiles.js` say what each entry claims. Nothing
+in this section moves a title to hardware: that still needs the frame checked
+by eye on the hardware path and a speed win.
+
 ## Depth convention made consistent for 3D gameplay (2026-10-23, awaiting GPU verification)
 
 Wii titles rendered their menus on `video=wgpu` and lost their gameplay. The
@@ -45,7 +154,7 @@ cause is in how depth values left the core, not in the consumer's geometry:
   swapped the two and drew those passes inside out, or black against the
   hard-coded clear.
 
-Vendor patch `0074-webgpu-depth-convention`:
+Vendor patch `0075-webgpu-depth-convention`:
 
 - removes the §28at gating, so VideoCommon's `1 - x` conversions apply to this
   backend as to any other without reversed depth ranges;
@@ -57,7 +166,7 @@ Vendor patch `0074-webgpu-depth-convention`:
   (`VertexShaderManager::UseVertexDepthRange`) even without depth clamping, so
   the GPU viewport is always `[0, 1]` and the swap never fires;
 - keeps the previous behaviour behind `?wgpudepthlegacy=1` (renderer feature
-  mask bit 1) for an A/B on a real title.
+  mask bit 4, `legacyDepth` in `src/game-profiles.js`) for an A/B on a real title.
 
 **Not verified on a GPU.** The session that made this change had no disc
 images and no hardware adapter; the evidence is the code paths above plus the

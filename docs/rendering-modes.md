@@ -16,8 +16,6 @@ software-rendered framebuffer reaches the browser canvas.
 | `video=wgpu` | True WebGPU hardware renderer | Experimental | Fixed battle renders on the validation GPU; remains slow and GPU-dependent |
 | `video=ogl` | OGL/WebGL2-style path | Experimental/diagnostic | JIT defaults differ here |
 | `oglsab=1` | SharedArrayBuffer pixel transport for OGL readback | Diagnostic | Requires cross-origin isolation |
-| `wgpuclearrect=0` | Hardware renderer: disable the scissored in-pass EFB clear | Bisection only | Restores the over-clearing legacy path (patchwork Mario Kart Wii frame) |
-| `wgpudepthlegacy=1` | Hardware renderer: the pre-0074 depth convention (fog, z-texture depth and EFB depth copies inverted; clear depth hard-coded) | Bisection only | A/B against the default on a title whose 3D gameplay looks wrong |
 
 ## Software-hybrid path
 
@@ -48,6 +46,19 @@ histograms for hardware-WGPU experiments. It requires `video=wgpu&metrics=1`
 and is default-off because its per-draw clocks and atomic counters perturb the
 path being measured. Ordinary `metrics=1` keeps general telemetry without
 activating this detailed UBO instrumentation.
+
+The hardware backend's renderer feature mask is resolved per title by
+`src/game-profiles.js` (backend defaults, then the game's profile, then the
+URL). Each bit has a flag for bisection; absent flags leave the profile's
+choice standing:
+
+| flag | bit | default | what it does |
+| --- | --- | --- | --- |
+| `wgpuclearrect=0` | 0 | on | sub-rect / independent-channel EFB clears as a scissored draw inside the pass |
+| `wgpuzcomploc=0` | 1 | on | report no early-Z, so VideoCommon's zcomploc hack runs instead of a `FORCE_EARLY_Z` the WGSL translation drops |
+| `wgpulogicop=0` | 2 | on | report no logic ops, so VideoCommon approximates them (with shader help) rather than the producer |
+| `wgpureadback=1` | 3 | off | GPU → heap readback: EFB copies to RAM, EFB peeks and the bounding box return real values; a stall per copy |
+| `wgpudepthlegacy=1` | 4 | off | the depth convention of the cores before vendor patch 0075: fog, z-texture depth and EFB depth copies inverted, clear depth hard-coded; for an A/B only |
 
 `video=ogl` is an OGL/WebGL2-style diagnostic backend. Its JIT safety behavior
 is intentionally more conservative; see [JIT flags](jit-flags.md).

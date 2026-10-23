@@ -157,7 +157,7 @@ link. See [rendering modes](docs/rendering-modes.md) and
 |------|-------|
 | Melee boot + gameplay (software hybrid) | ✅ Playable when locally validated; speed is scene/machine dependent |
 | Broader GameCube library | ✅ Boots widely; per-game renderer defaults from two 45-disc sweeps |
-| Wii discs | ⚠️ Boot and run on the software path, Wii Remote 1 driven from the page; the hardware path's depth convention was fixed for 3D gameplay (patch 0074) and awaits by-eye verification |
+| Wii discs | ⚠️ Boot and run on the software path, Wii Remote 1 driven from the page; the hardware path's depth convention was fixed for 3D gameplay (patch 0075) and awaits by-eye verification |
 | PPC→WASM JIT with GPR register cache | ⚠️ Default-on; old `addzex` failures are fixed, benefit remains scene-dependent |
 | Presentation smoothness (pacing, fast raster) | ✅ Tunable; software rasterizer caps unique-frame rate |
 | Audio | ✅ Worker-fed/tuned audio buffering |
@@ -322,9 +322,9 @@ as `unsampled` rather than claiming an `xfb-hash` it never took.
 
 Depth on this path is reverse-Z: the EFB depth buffer holds `1 - console depth`,
 the consumer clears depth to 0.0 and flips every depth compare, and -- since
-vendor patch 0074 -- VideoCommon converts fog, per-pixel depth, EFB depth copies,
+vendor patch 0075 -- VideoCommon converts fog, per-pixel depth, EFB depth copies,
 EFB peeks/pokes and clear values to match, as it does for any backend without
-reversed depth ranges. The cores before 0074 skipped those conversions, which
+reversed depth ranges. The cores before 0075 skipped those conversions, which
 inverted exactly the depth-based effects 3D gameplay is built on while menus
 rendered. `?wgpudepthlegacy=1` restores that older behaviour for an A/B.
 
@@ -346,6 +346,29 @@ recommendation needs the frame checked by eye against the software render **and*
 a material speed win — a wrong frame can be fast. Titles with a big FPS win but
 no verified screenshot are left out. Anything absent from the table keeps the
 shipping default. See [the hardware renderer bug log](docs/webgpu-hardware-renderer-bugs.md).
+
+An entry can also carry what upstream Dolphin knows about the title and what
+the hardware path needs to honour it:
+
+- **upstream game settings** — the `[Video_*]` lines from upstream's
+  `Data/Sys/GameSettings/<id>.ini`. This build embeds only `Sys/Wii`, so those
+  per-game settings were never loaded on either path; the worker now writes
+  the profile's lines to `/dolphin-sys/GameSettings/<id>.ini` before boot and
+  Dolphin's own game-config loader applies them. `[Core]` lines are never
+  carried (F-Zero GX's upstream `CPUThread = False` would undo dual core).
+- **renderer features** — bits of the WebGPU backend's feature mask. Three
+  default on for every title: the scissored clear, reporting no early-Z so
+  VideoCommon's zcomploc fallback runs (the SPIR-V→WGSL translation drops
+  `FORCE_EARLY_Z`), and reporting no logic ops so VideoCommon approximates
+  them. The fourth, **GPU readback** (EFB copies to RAM, EFB peeks, bounding
+  box), is a per-copy stall and is on only where upstream's settings say the
+  game reads its EFB back. Each bit has a URL flag for bisection:
+  `wgpuclearrect`, `wgpuzcomploc`, `wgpulogicop`, `wgpureadback`,
+  `wgpudepthlegacy` (`=0`/`=1`). The last is off: it restores the depth
+  convention of the cores before vendor patch 0075, for an A/B only.
+
+The **Auto per-game** switch governs all of it; an explicit `?video=` flag
+overrides only the renderer choice. The status line names what was applied.
 
 ### Rust: `tools/naga-spirv-wgsl`
 
@@ -466,7 +489,7 @@ tests/                   Node unit tests
   Remote 1 from the page. On the hardware path, Wii titles rendered their menus
   and lost their 3D gameplay; the cause -- fog, z-texture depth and EFB depth
   copies left inverted by an inconsistent depth convention -- is fixed in vendor
-  patch 0074, but no Wii title has yet been verified by eye in gameplay on it,
+  patch 0075, but no Wii title has yet been verified by eye in gameplay on it,
   so Wii titles keep the software default. See
   [the hardware renderer bug log](docs/webgpu-hardware-renderer-bugs.md).
 - In-browser structural limits (no fastmem trap and no SIMD emission in the
@@ -512,7 +535,7 @@ built from. The core `.wasm` in this repository is built from:
 - upstream Dolphin at commit
   [`cf5cb7ef`](https://github.com/dolphin-emu/dolphin/commit/cf5cb7ef81c3e8e7af5c9d566334219ffda9f68b)
   (master, 2026-10-19),
-- plus the 65 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
+- plus the 74 patches in [`patches/dolphin-wasm/snapshot/`](patches/dolphin-wasm/snapshot),
 - plus the C-ABI shim in [`core/upstream/`](core/upstream) and the build driver
   in [`tools/`](tools).
 

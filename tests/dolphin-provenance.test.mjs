@@ -302,10 +302,11 @@ test("committed Dolphin provenance and ABI manifests verify", () => {
   // LazyMemoryRegion: MemArena.h and MemArenaUnix.cpp), 115; 0069 (the Web
   // input backend: Web.cpp, Web.h, ControllerInterface.cpp), 118; 0071 (the IOS
   // host filesystem's position/size cache: HostBackend/FS.h and File.cpp), 120;
-  // 0074 (the WebGPU depth convention: VertexShaderManager.cpp and
-  // VideoConfig.h), 122.
+  // 0074 (WebGPU readback and per-game capabilities: WebGPUBoundingBox.cpp,
+  // WebGPUReadback.cpp/.h and WebGPURendererFeatures.h), 124; 0075 (the WebGPU
+  // depth convention: VertexShaderManager.cpp and VideoConfig.h), 126.
   // Update deliberately when the series changes what it modifies.
-  assert.equal(result.vendorSnapshot.rootPaths, 122);
+  assert.equal(result.vendorSnapshot.rootPaths, 126);
   assert.equal(result.vendorSnapshot.submodulePaths, 2);
   assert.equal(result.core.abiVersion, 1);
   assert.equal(result.core.memoryContract.jsGlue.initialPages, 24576);

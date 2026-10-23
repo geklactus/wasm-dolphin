@@ -68,8 +68,9 @@ export class UpstreamWorkerAdapter {
     jitVerbose = false,
     frameCap = 0,
     cachedInterpreterDisableMask = 0,
+    gameProfile = null,
+    rendererFeatureOverrides = {},
     wgpuScissoredClearRect = true,
-    wgpuLegacyDepth = false,
     noJitCache = false,
     collectMetrics = false,
     legacyOneWayAck = false,
@@ -165,8 +166,9 @@ export class UpstreamWorkerAdapter {
     this.jitVerbose = Boolean(jitVerbose);
     this.frameCap = Number(frameCap) || 0;
     this.cachedInterpreterDisableMask = (Number(cachedInterpreterDisableMask) || 0) >>> 0;
+    this.gameProfile = gameProfile ?? null;
+    this.rendererFeatureOverrides = { ...(rendererFeatureOverrides ?? {}) };
     this.wgpuScissoredClearRect = wgpuScissoredClearRect !== false;
-    this.wgpuLegacyDepth = wgpuLegacyDepth === true;
     this.noJitCache = Boolean(noJitCache);
     this.collectMetrics = Boolean(collectMetrics);
     this.legacyOneWayAck = Boolean(legacyOneWayAck);
@@ -375,8 +377,9 @@ export class UpstreamWorkerAdapter {
       jitVerbose: this.jitVerbose,
       frameCap: this.frameCap,
       cachedInterpreterDisableMask: this.cachedInterpreterDisableMask,
+      gameProfile: this.gameProfile,
+      rendererFeatureOverrides: this.rendererFeatureOverrides,
       wgpuScissoredClearRect: this.wgpuScissoredClearRect,
-      wgpuLegacyDepth: this.wgpuLegacyDepth,
       noJitCache: this.noJitCache,
       collectMetrics: this.collectMetrics,
       legacyOneWayAck: this.legacyOneWayAck,

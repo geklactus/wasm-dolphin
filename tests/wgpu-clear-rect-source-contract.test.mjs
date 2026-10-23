@@ -49,6 +49,10 @@ const gfxUrl = new URL(
   "../vendor/dolphin/Source/Core/VideoBackends/WebGPU/WebGPUGfx.cpp",
   import.meta.url
 );
+const featuresUrl = new URL(
+  "../vendor/dolphin/Source/Core/VideoBackends/WebGPU/WebGPURendererFeatures.h",
+  import.meta.url
+);
 const streamHeaderUrl = new URL(
   "../vendor/dolphin/Source/Core/VideoBackends/WebGPU/WebGPUCommandStream.h",
   import.meta.url
@@ -82,16 +86,20 @@ function clearRegionBody(source) {
 
 test("the scissored clear is a renderer capability that defaults ON", { skip }, async () => {
   const source = await read(gfxUrl);
+  // The bits and the default moved to WebGPURendererFeatures.h so that
+  // VideoBackend.cpp and the readback path read the same definitions.
+  const features = await read(featuresUrl);
+  assert.match(source, /#include "VideoBackends\/WebGPU\/WebGPURendererFeatures\.h"/);
 
   const bit = /DOLPHIN_WEB_RENDERER_FEATURE_SCISSORED_CLEAR_RECT\s*=\s*1u\s*<<\s*(\d+)\s*;/.exec(
-    source
+    features
   );
   assert.ok(bit, "the ClearRect feature bit is not declared");
 
   // Default ON. This is the property that matters: a launch that never calls
   // the setter must still emit ClearRect. If the default ever loses this bit,
   // Mario Kart Wii silently goes back to a patchwork frame.
-  const dflt = /DOLPHIN_WEB_RENDERER_FEATURE_DEFAULT\s*=\s*([^;]+);/.exec(source);
+  const dflt = /DOLPHIN_WEB_RENDERER_FEATURE_DEFAULT\s*=\s*([^;]+);/.exec(features);
   assert.ok(dflt, "the default renderer feature mask is not declared");
   assert.match(
     dflt[1],
@@ -223,15 +231,29 @@ test("a default launch turns the capability on", { skip: false }, async () => {
     /wgpuScissoredClearRect = true,/,
     "the worker default for the capability must be on"
   );
+  // The mask is resolved by src/game-profiles.js (backend defaults, then the
+  // title's profile, then URL overrides); the ClearRect flag clears its bit
+  // through an override so the profile cannot turn it back on.
   assert.match(
     worker,
-    /let rendererFeatureMask = RENDERER_FEATURE_SCISSORED_CLEAR_RECT;/,
-    "the worker must start from the enabled mask"
+    /if \(!wgpuScissoredClearRect\) rendererFeatureOverridesResolved\.scissoredClearRect = false;/,
+    "?wgpuclearrect=0 must clear the bit through the overrides"
   );
   assert.match(
     worker,
-    /if \(rendererMaskSupported\) \{\s*\n\s*api\.setRendererFeatureMask\(rendererFeatureMask\);/,
+    /const rendererFeatureMaskValue =\s*\n\s*rendererFeatureMask\(activeGameProfile, rendererFeatureOverridesResolved\);/,
+    "the worker must resolve the mask through game-profiles.js"
+  );
+  assert.match(
+    worker,
+    /if \(rendererMaskSupported\) \{\s*\n\s*api\.setRendererFeatureMask\(rendererFeatureMaskValue\);/,
     "the worker must push the capability mask to a core that supports it"
+  );
+  const profiles = await read(new URL("../src/game-profiles.js", import.meta.url));
+  assert.match(
+    profiles,
+    /scissoredClearRect: Object\.freeze\(\{ bit: 1 << 0, default: true, flag: "wgpuclearrect" \}\)/,
+    "game-profiles.js must default the ClearRect bit on"
   );
 
   // The unconditional smuggling is gone: bit 24 is only ever set now as a
