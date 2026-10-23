@@ -12,6 +12,11 @@ import { parseDolHeader } from "./dol.js";
 import { decodeWgpuSamplerState } from "./wgpu-sampler-state.js";
 import { decodePrebuiltCache } from "./prebuilt-jit-cache-format.js";
 import {
+  rendererFeatureMask,
+  rendererFeatureNames,
+  writeGameSettingsIni
+} from "./game-profiles.js";
+import {
   JIT_CACHE_ENTRY_KEY_SCHEMA,
   canonicalCoreFingerprint,
   classifyJitCacheIdentity,
@@ -985,7 +990,7 @@ async function handleMessage(type, payload) {
       });
       return metadataPayload();
     case "mountFile":
-      return mountFile(payload.file);
+      return mountFile(payload.file, payload.gameProfile ?? activeGameProfile);
     case "setInputMask":
       inputMask = payload.mask >>> 0;
       api?.setInputMask(inputMask);
@@ -1439,6 +1444,10 @@ async function handleMessage(type, payload) {
   }
 }
 
+// The per-game profile payload the host sent with the load (src/game-profiles.js
+// gameProfilePayload): the title's upstream GameSettings lines and feature bits.
+let activeGameProfile = null;
+
 async function loadCore({
   coreUrl: nextCoreUrl = DEFAULT_UPSTREAM_CORE_URL,
   expectedCoreSha256 = DEFAULT_UPSTREAM_CORE_SHA256,
@@ -1471,6 +1480,8 @@ async function loadCore({
   frameCap = 0,
   cachedInterpreterDisableMask = 0,
   wgpuScissoredClearRect = true,
+  gameProfile = null,
+  rendererFeatureOverrides = {},
   noJitCache = false,
   reportedCoreSelection = null,
   wgpuReplayDiagnostics = false,
@@ -2119,16 +2130,16 @@ async function loadCore({
   if (wgpuProducerProfileRequested || wgpuDrawProfileRequested)
     verifyWgpuProducerProfileActivation("core boot");
   // Renderer capabilities are their own mask, separate from the CPU disable
-  // mask below. The backend defaults every bit ON, so a call is only strictly
-  // needed to turn something OFF for bisection -- but it is issued
+  // mask below: the backend defaults (RENDERER_FEATURES in game-profiles.js),
+  // then the title's profile, then the URL overrides. It is issued
   // unconditionally so the active configuration is visible in the status log
-  // rather than implied.
-  const RENDERER_FEATURE_SCISSORED_CLEAR_RECT = 1 << 0;
-  let rendererFeatureMask = RENDERER_FEATURE_SCISSORED_CLEAR_RECT;
-  if (!wgpuScissoredClearRect) {
-    rendererFeatureMask =
-      (rendererFeatureMask & ~RENDERER_FEATURE_SCISSORED_CLEAR_RECT) >>> 0;
-  }
+  // rather than implied. `?wgpuclearrect=0` keeps its own plumbing because a
+  // core older than the mask reads it through the legacy disable bit below.
+  activeGameProfile = gameProfile ?? null;
+  const rendererFeatureOverridesResolved = { ...(rendererFeatureOverrides ?? {}) };
+  if (!wgpuScissoredClearRect) rendererFeatureOverridesResolved.scissoredClearRect = false;
+  const rendererFeatureMaskValue =
+    rendererFeatureMask(activeGameProfile, rendererFeatureOverridesResolved);
 
   // Cores built before the capability existed read the ClearRect enable out of
   // the cached-interpreter disable mask instead, at bit 24, defaulting to off.
@@ -2147,8 +2158,12 @@ async function loadCore({
     postStatus(`CachedInterpreter disable mask = 0x${disableMask.toString(16)}`);
   }
   if (rendererMaskSupported) {
-    api.setRendererFeatureMask(rendererFeatureMask);
-    postStatus(`Renderer feature mask = 0x${rendererFeatureMask.toString(16)}`);
+    api.setRendererFeatureMask(rendererFeatureMaskValue);
+    postStatus(
+      `Renderer feature mask = 0x${rendererFeatureMaskValue.toString(16)} ` +
+      `(${rendererFeatureNames(rendererFeatureMaskValue).join(" ") || "none"})` +
+      (activeGameProfile?.gameId ? ` for ${activeGameProfile.gameId}` : "")
+    );
   } else {
     postStatus(
       `Renderer feature mask unsupported by this core; ClearRect via legacy bit 24 ` +
@@ -2480,7 +2495,7 @@ function bindApi(module) {
   };
 }
 
-async function mountFile(file) {
+async function mountFile(file, gameProfile = activeGameProfile) {
   if (!moduleInstance) {
     throw new Error("Upstream core must be loaded before mounting a disc");
   }
@@ -2531,6 +2546,10 @@ async function mountFile(file) {
 
   if (api.bootDisc && file.size >= MIN_FULL_BOOT_BYTES) {
     coreBoot.attempted = true;
+    // Upstream's per-game settings for this title, applied by Dolphin's own
+    // loader at boot (BootManager -> ConfigLoaders::GenerateGlobalGameConfigLoader
+    // reads /dolphin-sys/GameSettings/<id>.ini).
+    writeGameSettingsIni(fs, gameProfile, postStatus);
     const _t_boot = performance.now();
     coreBoot.accepted = Boolean(api.bootDisc(path));
     if (coreBoot.accepted) {
@@ -6497,6 +6516,11 @@ const WGPU_CMD_OP_SUBMIT_PRESENT = 22;
 const WGPU_CMD_OP_DESTROY = 23;
 const WGPU_CMD_OP_BLIT_TEXTURE = 24;
 const WGPU_CMD_OP_CLEAR_RECT = 25;
+// GPU -> heap readback (WebGPUCommandStream.h: ReadbackTexture / ReadbackBuffer).
+// The producer waits on a heap word pair; the consumer copies the mapped bytes
+// into the heap and completes it with the serial it was given.
+const WGPU_CMD_OP_READBACK_TEXTURE = 26;
+const WGPU_CMD_OP_READBACK_BUFFER = 27;
 // ClearRect uses the full attachment viewport and [0,1] depth range, so its
 // scissor alone determines coverage and its depth is independent of game state.
 // A/B switch: false restores the original game-viewport-dependent clear.
@@ -8294,6 +8318,85 @@ function ensureBlitPipeline(dstFmt) {
   }
   return p;
 }
+// GPU -> heap readback (CmdOp::ReadbackTexture / ReadbackBuffer). The record
+// names a heap destination and a flag word pair: flag[1] is the serial the
+// producer armed before pushing, flag[0] is where this side stores that serial
+// once the mapped bytes are in the heap. The producer futex-waits on flag[0]
+// (WebGPUReadback.cpp), so the copy is submitted the moment it is encoded
+// rather than at the next present -- the producer is already blocked on it.
+// Every readback that cannot be served is completed anyway, so the producer
+// gets its (unchanged, zero-filled) buffer back at once instead of after its
+// timeout.
+const wgpuReadbackStats = {
+  requested: 0, completed: 0, unserved: 0, failed: 0, pooled: 0
+};
+const wgpuReadbackPool = [];
+function acquireReadbackBuffer(dev, size) {
+  const need = Math.max(256, Math.ceil(size / 256) * 256);
+  for (const slot of wgpuReadbackPool) {
+    if (!slot.busy && slot.size >= need) return slot;
+  }
+  const slot = {
+    buffer: dev.createBuffer({
+      label: "dolphin-readback",
+      size: need,
+      // MAP_READ | COPY_DST
+      usage: 0x1 | 0x8
+    }),
+    size: need,
+    busy: false
+  };
+  if (wgpuReadbackPool.length < 16) {
+    wgpuReadbackPool.push(slot);
+    wgpuReadbackStats.pooled = wgpuReadbackPool.length;
+  }
+  return slot;
+}
+function completeReadback(flagPtr, serial) {
+  if (!moduleInstance?.HEAPU8 || !flagPtr) return;
+  const i32 = new Int32Array(moduleInstance.HEAPU8.buffer);
+  Atomics.store(i32, flagPtr >>> 2, serial | 0);
+  Atomics.notify(i32, flagPtr >>> 2);
+}
+function readbackSerialFor(flagPtr) {
+  if (!moduleInstance?.HEAPU8 || !flagPtr) return 0;
+  const i32 = new Int32Array(moduleInstance.HEAPU8.buffer);
+  return Atomics.load(i32, (flagPtr + 4) >>> 2) | 0;
+}
+// Copy `rows` rows of `rowBytes` from a mapped readback buffer (rows padded to
+// `srcStride`) into the heap at `dst`, `dstStride` apart. Returns a promise
+// that resolves once the flag is completed; the slot is released either way.
+function finishReadback(slot, byteLength, rows, rowBytes, srcStride, dst, dstStride,
+                        flagPtr, serial, label) {
+  slot.busy = true;
+  wgpuReadbackStats.requested += 1;
+  return slot.buffer.mapAsync(1 /* GPUMapMode.READ */, 0, byteLength).then(() => {
+    try {
+      const src = new Uint8Array(slot.buffer.getMappedRange(0, byteLength));
+      const heap = new Uint8Array(moduleInstance.HEAPU8.buffer);
+      for (let row = 0; row < rows; row += 1) {
+        heap.set(src.subarray(row * srcStride, row * srcStride + rowBytes), dst + row * dstStride);
+      }
+      wgpuReadbackStats.completed += 1;
+      if (wgpuReadbackStats.completed === 1) {
+        console.log(`[webgpu-readback] first ${label} readback landed (${rows}x${rowBytes} bytes)`);
+      }
+    } finally {
+      try { slot.buffer.unmap(); } catch {}
+      slot.busy = false;
+      completeReadback(flagPtr, serial);
+    }
+  }).catch((e) => {
+    slot.busy = false;
+    wgpuReadbackStats.failed += 1;
+    recordRendererError("readback", `${label}: ${e?.message || e}`);
+    if (wgpuReadbackStats.failed === 1) {
+      console.log(`[webgpu-readback] ${label} readback failed: ${e?.message || e}`);
+    }
+    completeReadback(flagPtr, serial);
+  });
+}
+
 function blitTexture(enc, s, d, sx, sy, sw, sh, dx, dy, dw, dh,
                      sLayer, sLevel, dLayer, dLevel) {
   const dev = renderGpu.device;
@@ -12245,6 +12348,81 @@ function drainWebGpuCmdRing(source = "presentation") {
           passHasPipe = false;
           passNeedsVertexBuffer = false;
           self._wgCurPipe = 0;
+          break;
+        }
+        case WGPU_CMD_OP_READBACK_TEXTURE: {
+          const texId = u32[recWord + 1];
+          const xy = u32[recWord + 2] >>> 0;
+          const wh = u32[recWord + 3] >>> 0;
+          const packed = u32[recWord + 4] >>> 0;
+          const dst = u32[recWord + 5] >>> 0;
+          const dstStride = u32[recWord + 6] >>> 0;
+          const flagPtr = u32[recWord + 7] >>> 0;
+          const serial = readbackSerialFor(flagPtr);
+          const rx = xy & 0xFFFF, ry = xy >>> 16;
+          const rw = wh & 0xFFFF, rh = wh >>> 16;
+          const layer = packed & 0xFF, level = (packed >>> 8) & 0xFF;
+          const texel = (packed >>> 16) & 0xFF;
+          const t = webGpuObjects.textures.get(texId);
+          if (!t) wgpuReplayClassifier?.recordMissingResource({ kind: "readback-texture", id: texId });
+          // Depth formats cannot be copied to a buffer; VideoCommon reads depth
+          // through an R32F copy, so this only guards a malformed record.
+          if (!t || t.format.startsWith("depth") || rw === 0 || rh === 0 || texel === 0 ||
+              !dst || !flagPtr) {
+            wgpuReadbackStats.unserved += 1;
+            completeReadback(flagPtr, serial);
+            break;
+          }
+          endPass("readback", read);
+          const rowBytes = rw * texel;
+          const srcStride = Math.ceil(rowBytes / 256) * 256;
+          const byteLength = srcStride * rh;
+          const slot = acquireReadbackBuffer(dev, byteLength);
+          try {
+            ensureEnc().copyTextureToBuffer(
+              { texture: t.tex, mipLevel: level, origin: { x: rx, y: ry, z: layer } },
+              { buffer: slot.buffer, bytesPerRow: srcStride, rowsPerImage: rh },
+              { width: rw, height: rh, depthOrArrayLayers: 1 });
+          } catch (e) {
+            wgpuReadbackStats.failed += 1;
+            recordRendererError("readback", `copyTextureToBuffer: ${e?.message || e}`);
+            completeReadback(flagPtr, serial);
+            break;
+          }
+          // The producer is blocked on this copy: submit now, not at present.
+          submitEnc("readback");
+          finishReadback(slot, byteLength, rh, rowBytes, srcStride, dst, dstStride,
+                         flagPtr, serial, "texture");
+          break;
+        }
+        case WGPU_CMD_OP_READBACK_BUFFER: {
+          const bufId = u32[recWord + 1];
+          const srcOffset = u32[recWord + 2] >>> 0;
+          const len = u32[recWord + 3] >>> 0;
+          const dst = u32[recWord + 4] >>> 0;
+          const flagPtr = u32[recWord + 5] >>> 0;
+          const serial = readbackSerialFor(flagPtr);
+          const b = webGpuObjects.buffers.get(bufId);
+          const buf = b?.buffer ?? b;
+          if (!buf) wgpuReplayClassifier?.recordMissingResource({ kind: "readback-buffer", id: bufId });
+          if (!buf || len === 0 || (len & 3) !== 0 || (srcOffset & 3) !== 0 || !dst || !flagPtr) {
+            wgpuReadbackStats.unserved += 1;
+            completeReadback(flagPtr, serial);
+            break;
+          }
+          endPass("readback", read);
+          const slot = acquireReadbackBuffer(dev, len);
+          try {
+            ensureEnc().copyBufferToBuffer(buf, srcOffset, slot.buffer, 0, len);
+          } catch (e) {
+            wgpuReadbackStats.failed += 1;
+            recordRendererError("readback", `copyBufferToBuffer: ${e?.message || e}`);
+            completeReadback(flagPtr, serial);
+            break;
+          }
+          submitEnc("readback");
+          finishReadback(slot, Math.ceil(len / 256) * 256, 1, len, len, dst, len,
+                         flagPtr, serial, "buffer");
           break;
         }
         case WGPU_CMD_OP_SET_SCISSOR:
