@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 07:28:48 +0000
+Subject: [PATCH] 0072-compile-cap-per-slice
+
+
+diff --git a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+index 337f7140d8..c85069c7aa 100644
+--- a/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
++++ b/Source/Core/Core/PowerPC/CachedInterpreter/CachedInterpreter.cpp
+@@ -287,8 +287,13 @@ constexpr u32 DOLPHIN_WEB_ENABLE_FASTMEM_HOIST = 1u << 23;
+ // compile wall time have happened in the current CoreTiming slice. Smears
+ // the cold-start 1.6s compile burst across thousands of slices instead of
+ // one freeze. Per-slice counter reset in CachedInterpreter::Run().
+-constexpr u32 COMPILE_THROTTLE_MAX_PER_SLICE = 8;
+-constexpr u32 COMPILE_THROTTLE_MAX_US_PER_SLICE = 5000;
++// §29e: was 8 / 5000. A Wii menu's compile at ~150 µs a block never came near the time
++// cap; it was the count that held it to 8 a slice, so a new hot loop ran interpreted for
++// seconds (Mario Kart Wii's save-file checksum at "Saving…": 2-9% game speed) while its
++// blocks waited in the deferred queue. The wall-clock budget below is what now bounds
++// the share of time compiling; the per-slice cap is a ceiling on one slice's burst.
++constexpr u32 COMPILE_THROTTLE_MAX_PER_SLICE = 64;
++constexpr u32 COMPILE_THROTTLE_MAX_US_PER_SLICE = 4000;
+ // §29a wall-clock compile budget. The per-slice cap above bounds a *slice*, but a
+ // slice is a few hundred microseconds of emulated time, so 8 compiles (or 5 ms) per
+ // slice still lets a cold title spend most of the wall clock compiling: a Wii menu
+@@ -299,8 +304,8 @@ constexpr u32 COMPILE_THROTTLE_MAX_US_PER_SLICE = 5000;
+ // wall clock, measured over the bucket, so the burst stretches over a few seconds at
+ // >= (100 - percent)% speed instead. Rejected blocks defer like the per-slice path
+ // (interpreted now, retried next slice).
+-constexpr u32 COMPILE_WALL_BUDGET_PERCENT = 25;
+-constexpr s64 COMPILE_WALL_BUDGET_CAP_US = 20000;   // the most that can be banked (one burst of ~20 ms)
++constexpr u32 COMPILE_WALL_BUDGET_PERCENT = 40;
++constexpr s64 COMPILE_WALL_BUDGET_CAP_US = 30000;   // the most that can be banked (one burst of ~30 ms)
+ 
+ inline bool DolphinWebHelperDisabled(u32 bit)
+ {

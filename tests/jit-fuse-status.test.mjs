@@ -25,6 +25,7 @@ function createFuse(overrides = {}) {
     api: {
       getFrame: () => 300,
       setPpcWasmJitEnabled: (mode) => nativeCalls.push(mode),
+      getPpcWasmBlockCompileCount: () => overrides.compileCount ?? 0,
     },
     postStatus: (status) => statuses.push(status),
     performance: { now: () => 2000 },
@@ -37,6 +38,7 @@ function createFuse(overrides = {}) {
     ppcWasmJitCooldownUntilFrame: 0,
     ppcWasmJitFuseLastFrame: 240,
     ppcWasmJitFuseLastTime: 0,
+    ppcWasmJitFuseLastCompileCount: 0,
     ppcWasmJitPreEngageCoreFps: 60,
     presentationMaxIntervalMs: 20,
     presentationFps: 57,
@@ -82,6 +84,29 @@ test("healthy core throughput keeps JIT active even with low presentation FPS", 
   assert.equal(fuse.context.ppcWasmJitCooldownUntilFrame, 0);
   assert.equal(fuse.context.ppcWasmJitFuseLastFrame, 300);
   assert.equal(fuse.context.ppcWasmJitFuseLastTime, 2000);
+});
+
+// §29e: a window the JIT spent compiling fresh blocks is cold code, not a regression
+// the JIT caused — the fuse leaves it on and only moves its bookkeeping forward.
+test("a compile burst in the window keeps the JIT on", () => {
+  for (const [baseline, lastFrame] of [[60, 240], [0, 298]]) {
+    const fuse = createFuse({
+      ppcWasmJitPreEngageCoreFps: baseline,
+      ppcWasmJitFuseLastFrame: lastFrame,
+      ppcWasmJitFuseLastCompileCount: 1000,
+      compileCount: 1000 + 150,
+    });
+    assert.doesNotThrow(fuse.run);
+    assert.deepEqual(fuse.nativeCalls, []);
+    assert.deepEqual(fuse.statuses, []);
+    assert.equal(fuse.context.ppcWasmJitActive, true);
+    assert.equal(fuse.context.ppcWasmJitFuseLastFrame, 300);
+    assert.equal(fuse.context.ppcWasmJitFuseLastCompileCount, 1150);
+  }
+  // 149 fresh blocks is below the cold-code mark: the regression still counts.
+  const fuse = createFuse({ ppcWasmJitFuseLastCompileCount: 1000, compileCount: 1149 });
+  fuse.run();
+  assert.deepEqual(fuse.nativeCalls, [0]);
 });
 
 test("activation grace period defers throughput fuse and its status", () => {
