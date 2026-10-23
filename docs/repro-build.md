@@ -136,8 +136,8 @@ baked core:
 
 | Artifact | Canonical size | SHA-256 |
 | --- | ---: | --- |
-| `dolphin-core-upstream.js` | 267,945 normalized bytes | `e53105fe13e44d9baf2c8e50a88ee0c4e1a6b6e9b6694bcd17b4f62aab29ced3` |
-| `dolphin-core-upstream.wasm` | 13,231,667 bytes | `505f65897984b7832dd048cbcfe16ed420061af9d659c1f5b92f97f0fde23698` |
+| `dolphin-core-upstream.js` | 268,119 normalized bytes | `20e7576575ce42225a2fc923d09a743599508d78facc970dab963b9b1a402469` |
+| `dolphin-core-upstream.wasm` | 13,234,447 bytes | `e54b52d3b8b517d8418682fb59572e120e25ffaf8e111b8908080bd62ddbbafb` |
 
 The JS digest is calculated after CRLF-to-LF normalization, and
 `.gitattributes` requires LF for core JS files. This prevents checkout line
