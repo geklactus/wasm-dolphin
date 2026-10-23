@@ -649,7 +649,14 @@ void EnsureRuntime()
   Config::SetBase(Config::MAIN_SKIP_IPL, true);
   Config::SetBase(Config::MAIN_DSP_HLE, true);
   Config::SetBase(Config::MAIN_DSP_THREAD, false);
-  Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
+  // §29b: fast disc reads unless the host asks for the real drive's timing
+  // (Module['dolphinFastDiscSpeed'] === false, ?fastdisc=0): a disc served over
+  // HTTP needs the seek+transfer time the game expects, or every fetch that the
+  // reader has to wait for stalls the whole core.
+  const bool fast_disc_speed =
+      EM_ASM_INT({ return (typeof Module !== 'undefined' &&
+                           Module['dolphinFastDiscSpeed'] === false) ? 0 : 1; }) != 0;
+  Config::SetBase(Config::MAIN_FAST_DISC_SPEED, fast_disc_speed);
   Config::SetBase(Config::MAIN_EMULATION_SPEED, s_emulation_speed);
   // §28cz play-speed sync. When the browser CPU falls more than MaxFallback
   // (100ms) behind in a heavy scene, Dolphin's throttle normally CONCEDES that
