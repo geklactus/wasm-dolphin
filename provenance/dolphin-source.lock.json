@@ -25,7 +25,7 @@
       "commit": "01e0577914a75a2569c846778c2f93aa8e6feddd"
     }
   },
-  "patchSeriesSha256": "6f35bd5b47f9ed106d5fc77ce89112a7d75415d68711617eb57528a18f749534",
+  "patchSeriesSha256": "5779679fd0c09b6d1d28ab02adca28cd2d126c297de77890e3c3bf7374e730d5",
   "patches": [
     {
       "order": 1,
@@ -565,6 +565,14 @@
     },
     {
       "order": 68,
+      "cwd": ".",
+      "hashMode": "lf-normalized",
+      "path": "patches/dolphin-wasm/snapshot/0071-ios-hostfs-fewer-syscalls.patch",
+      "size": 7090,
+      "sha256": "5877aeeecd5d08eb0759ba1775f989f0ec8f298bd6a15a9aa7979fe4ceecb981"
+    },
+    {
+      "order": 69,
       "cwd": "Externals/SFML/SFML",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0001-sfml-emscripten-config.patch",
@@ -572,7 +580,7 @@
       "sha256": "f82197a21fe982ad83f6ee7bbf5a03839b1cebd4d64da3eab11263842bf61d89"
     },
     {
-      "order": 69,
+      "order": 70,
       "cwd": "Externals/xxhash/xxHash",
       "hashMode": "lf-normalized",
       "path": "patches/dolphin-wasm/submodules/0002-xxhash-wasm-simd-scalar.patch",

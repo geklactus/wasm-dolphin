@@ -1850,6 +1850,7 @@ async function loadCore({
   const _t_fetch = performance.now();
   const { wasmBinary, fingerprint: buildFingerprint } =
       await fetchWasmAndFingerprint(coreUrl, expectedCoreSha256);
+  dolphinJitBuildFingerprint = buildFingerprint;
   console.log(`[boot-phase] fetchWasmAndFingerprint took ${(performance.now() - _t_fetch).toFixed(1)}ms (${(wasmBinary.byteLength / 1048576).toFixed(2)}MiB)`);
   const _t_import = performance.now();
   const imported = await import(coreUrl);
@@ -2531,6 +2532,11 @@ async function mountFile(file) {
     if (coreBoot.accepted) {
       rendererDiagnostics.activeVideoBackend = rendererDiagnostics.configuredVideoBackend || "unknown";
       rendererDiagnostics.videoBackendEvidence = "SetVideoBackend invoked and BootDisc accepted";
+      // §29c: the disc has said who it is; its prebuilt cache, if the server has one,
+      // lands in the background while the game boots.
+      seedPerGamePrebuiltCache(api.getGameId?.(), dolphinJitBuildFingerprint).catch((error) => {
+        postStatus(`jit-cache: per-title prebuilt seed failed: ${error?.message || error}`);
+      });
     }
     console.log(`[boot-phase] api.bootDisc() took ${(performance.now() - _t_boot).toFixed(1)}ms`);
     const _t_pump = performance.now();
@@ -5846,6 +5852,86 @@ async function maybeSeedIdbFromPrebuiltCache(coreUrlValue, currentFingerprint) {
     postStatus(`jit-cache: seeded ${seeded} prebuilt modules into IDB (fingerprint match)`);
   }
   return seeded;
+}
+
+// §29c per-title prebuilt JIT cache. The one file beside the core (prebuilt-jit-cache.bin,
+// read at boot, bounded by the boot load) cannot carry a library of titles; a file per
+// title — prebuilt-jit-cache/<GAMEID>.bin beside the core, same format, same fingerprint
+// rule — can, fetched once the disc has said who it is. Entries the cache doesn't hold
+// yet are compiled here, off the CPU pthread, pushed to the pthreads the way the lazy
+// fill does, and written to IDB so the next session reads them from there; the warmup
+// gate collapses once enough have landed, so a title's first session plays like its
+// second. A 404 is the normal case for a title nobody prebuilt.
+let dolphinJitBuildFingerprint = "";
+let dolphinJitPerGameSeeded = "";
+async function seedPerGamePrebuiltCache(gameId, currentFingerprint) {
+  await dolphinJitIdbReady;
+  if (!dolphinJitCachePersistenceEnabled || !dolphinJitIdb || !currentFingerprint) return 0;
+  const id = String(gameId || "").toUpperCase();
+  if (!/^[A-Z0-9]{4,6}$/.test(id) || dolphinJitPerGameSeeded === id) return 0;
+  dolphinJitPerGameSeeded = id;
+  const url = new URL(`prebuilt-jit-cache/${id}.bin`, coreUrl).href;
+  let buffer;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return 0;
+    buffer = await resp.arrayBuffer();
+  } catch {
+    return 0;
+  }
+  let decoded;
+  try {
+    decoded = decodePrebuiltCache(buffer);
+  } catch (err) {
+    postStatus(`jit-cache: ${id}: prebuilt decode failed: ${err?.message || err}`);
+    return 0;
+  }
+  if (decoded.fingerprint !== currentFingerprint) {
+    postStatus(`jit-cache: ${id}: prebuilt fingerprint mismatch (file=${decoded.fingerprint.slice(0, 8)} build=${currentFingerprint.slice(0, 8)}); ignored`);
+    return 0;
+  }
+  if (decoded.entryKeySchema !== JIT_CACHE_ENTRY_KEY_SCHEMA) {
+    postStatus(`jit-cache: ${id}: prebuilt entry-key schema mismatch; ignored`);
+    return 0;
+  }
+  const verified = await verifyDolphinJitEntries(decoded.entries);
+  if (!verified) {
+    postStatus(`jit-cache: ${id}: prebuilt block identity mismatch; entire file ignored`);
+    return 0;
+  }
+  const fresh = verified.filter(({ key }) => !dolphinJitCacheMap.has(key));
+  postStatus(`jit-cache: ${id}: prebuilt file holds ${verified.length} modules, ${fresh.length} new`);
+  const BATCH = 32;
+  const startedAt = performance.now();
+  let added = 0;
+  for (let i = 0; i < fresh.length; i += BATCH) {
+    if (dolphinJitCacheMap.size >= DOLPHIN_JIT_CACHE_MAX) break;
+    const slice = fresh.slice(i, i + BATCH);
+    const settled = await Promise.allSettled(slice.map(({ bytes }) => WebAssembly.compile(bytes)));
+    for (let k = 0; k < settled.length; k++) {
+      if (settled[k].status !== "fulfilled") continue;
+      const { key, bytes } = slice[k];
+      if (dolphinJitCacheMap.has(key)) continue;
+      const mod = settled[k].value;
+      dolphinJitCacheMap.set(key, mod);
+      added += 1;
+      for (const w of dolphinJitPthreadWorkers) {
+        try {
+          w.postMessage({ type: "dolphin-jit-cache-add", hash: key, module: mod });
+        } catch {
+          // a worker that has gone away; the rest still get it
+        }
+      }
+      writeDolphinJitEntryToIdb(key, bytes);
+    }
+    if (!dolphinJitCachePreWarmed && added >= DOLPHIN_JIT_PREWARM_THRESHOLD) {
+      dolphinJitCachePreWarmed = true;
+      postStatus(`jit-cache: ${id}: pre-warmed from its prebuilt file; JIT warmup gate will be skipped`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  postStatus(`jit-cache: ${id}: ${added} prebuilt modules in (cache ${dolphinJitCacheMap.size}) in ${Math.round(performance.now() - startedAt)}ms`);
+  return added;
 }
 
 async function reconcileJitCacheWithBuild(fingerprint) {
