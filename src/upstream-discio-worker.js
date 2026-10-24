@@ -134,7 +134,7 @@ import {
   createWgpuUploadProbeExecutor
 } from "./wgpu-upload-probe-executor.js";
 import { AudioPcmProducer } from "./audio-pcm-producer.js";
-import { openRangeDisc } from "./remote-disc.js";
+import { loadReadOrder, openRangeDisc } from "./remote-disc.js";
 import { createDiscFetcher } from "./remote-disc-fetch.js";
 import { installWgpuDiagnosticLogFilter } from "./diagnostic-log-filter.js";
 import {
@@ -1061,6 +1061,8 @@ async function handleMessage(type, payload) {
     case "discRemove":
       await remoteDisc?.removeFromDevice();
       return { disc: remoteDisc?.stats ?? null };
+    case "discReads":
+      return { reads: remoteDisc?.readOrder() ?? null };
     case "discFlush":
       remoteDisc?.flush();
       return { disc: remoteDisc?.stats ?? null };
@@ -2260,6 +2262,7 @@ async function openRemoteDisc(source, { gameRunning }) {
   remoteDisc = await openRangeDisc(source, {
     opfs: source.opfs !== false,
     prefetch: source.prefetch !== false,
+    loadOrder: (disc) => loadReadOrder(disc),
     getRoot: storage?.getDirectory ? () => storage.getDirectory() : null,
     estimate: storage?.estimate ? () => storage.estimate() : null,
     createFetcher: (disc, options) => createDiscFetcher(disc, { ...options, log }),

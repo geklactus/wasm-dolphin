@@ -14,9 +14,12 @@ import {
   blockCount,
   discCacheKey,
   listCachedDiscs,
+  loadReadOrder,
   openRangeDisc,
+  parseReadOrder,
   readCachedDiscEntry,
   readCachedRange,
+  readOrderUrl,
   readRemoteDiscFlags,
   removeCachedDisc,
   sameValidators
@@ -132,12 +135,27 @@ test("bitmap counts blocks, ignores bits past the end, finds the first missing b
   assert.throws(() => new BlockBitmap(10, new Uint8Array(1)), RangeError);
 });
 
-test("?prefetch=0 turns off the sequential stream and ?opfs=0 the copy on this device", () => {
-  assert.deepEqual(readRemoteDiscFlags(""), { prefetch: true, opfs: true });
-  assert.deepEqual(readRemoteDiscFlags("?disc=/d/x.rvz&prefetch=0"), { prefetch: false, opfs: true });
-  assert.deepEqual(readRemoteDiscFlags("?opfs=0"), { prefetch: true, opfs: false });
-  assert.deepEqual(readRemoteDiscFlags("?prefetch=off&opfs=false"), { prefetch: false, opfs: false });
-  assert.deepEqual(readRemoteDiscFlags("?prefetch=1&opfs=1"), { prefetch: true, opfs: true });
+test("?prefetch=0 turns off the sequential stream, ?opfs=0 the copy on this device, ?recordreads=1 records", () => {
+  assert.deepEqual(readRemoteDiscFlags(""), { prefetch: true, opfs: true, recordReads: false });
+  assert.deepEqual(readRemoteDiscFlags("?disc=/d/x.rvz&prefetch=0"), { prefetch: false, opfs: true, recordReads: false });
+  assert.deepEqual(readRemoteDiscFlags("?opfs=0"), { prefetch: true, opfs: false, recordReads: false });
+  assert.deepEqual(readRemoteDiscFlags("?prefetch=off&opfs=false"), { prefetch: false, opfs: false, recordReads: false });
+  assert.deepEqual(readRemoteDiscFlags("?prefetch=1&opfs=1&recordreads=1"), { prefetch: true, opfs: true, recordReads: true });
+});
+
+test("a read order: beside the disc, for that file only, each block once, junk dropped", async () => {
+  assert.equal(readOrderUrl("http://h/disc/wii/Mario Kart.rvz?x=1"), "http://h/disc/wii/Mario%20Kart.rvz.reads.json");
+  const src = source();
+  const order = { v: 1, size: src.size, block: B, blocks: [2, 0, 2, 7, -1, "1", 1] };
+  assert.deepEqual(parseReadOrder(order, { size: src.size }).blocks, [2, 0, 1]);
+  assert.equal(parseReadOrder({ ...order, size: src.size + 1 }, { size: src.size }).blocks, null, "another file");
+  assert.match(parseReadOrder({ ...order, block: B / 2 }, { size: src.size }).reason, /another file/);
+  assert.equal(parseReadOrder({ ...order, v: 2 }, { size: src.size }).blocks, null);
+  const reply = (status, body) => async () => ({ status, ok: status >= 200 && status < 300, json: async () => body });
+  assert.deepEqual(await loadReadOrder(src, { fetchImpl: reply(404) }), { blocks: null, reason: null }, "a 404 is the normal case");
+  assert.deepEqual((await loadReadOrder(src, { fetchImpl: reply(200, order) })).blocks, [2, 0, 1]);
+  assert.match((await loadReadOrder(src, { fetchImpl: reply(500) })).reason, /HTTP 500/);
+  assert.match((await loadReadOrder(src, { fetchImpl: async () => { throw new TypeError("offline"); } })).reason, /offline/);
 });
 
 test("validators: the size always, ETag and Last-Modified whenever either side has one", () => {
@@ -474,6 +492,61 @@ test("the sequential stream: on with a copy here, capped while the game runs, of
   assert.match(noStore.stats.reason, /\?opfs=0/);
   assert.deepEqual(streaming.sequential, [[false, 0]], "?opfs=0: nowhere to put a sequential stream");
   await noStore.close();
+});
+
+test("?recordreads=1: the blocks the core read, first touch first, each once, with when", async () => {
+  const src = source();
+  const fetcher = fakeFetcher(src);
+  let now = 0;
+  const disc = new RangeDisc({ ...src }, { fetcher, recordReads: true, now: () => now });
+  read(disc, 2 * B + 10, 2 * B + 20);
+  now = 1500;
+  read(disc, B - 5, B + 5);                  // blocks 0 and 1, in that order
+  read(disc, 2 * B, 2 * B + 1);              // 2 again: not again
+  assert.deepEqual(disc.readOrder(), { v: 1, name: src.name, size: src.size, block: B, blocks: [2, 0, 1], seconds: [0, 1.5, 1.5] });
+  assert.equal(disc.stats.recorded, 3);
+  const off = new RangeDisc({ ...src }, { fetcher: fakeFetcher(src) });
+  read(off, 0, 10);
+  assert.equal(off.readOrder(), null, "not recording unless asked");
+  assert.equal(off.stats.recorded, null);
+});
+
+test("a read order beside the disc goes to the fetcher, without holding up the open; none without a sequential stream", async () => {
+  const src = source();
+  const fetcher = fakeFetcher(src);
+  fetcher.orders = [];
+  fetcher.setOrder = (blocks) => fetcher.orders.push(blocks);
+  let answer;
+  const asked = [];
+  const disc = await openRangeDisc(src, {
+    opfs: true, getRoot: async () => new FakeDirectory(), estimate: roomy, createFetcher: () => fetcher,
+    loadOrder: (s) => { asked.push(s.url); return new Promise((resolve) => { answer = resolve; }); }
+  });
+  assert.deepEqual(asked, [src.url]);
+  assert.equal(disc.stats.readOrder, null, "open did not wait for it");
+  answer({ blocks: [2, 1], reason: null });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(fetcher.orders, [[2, 1]]);
+  assert.deepEqual(disc.stats.readOrder, { blocks: 2, from: "game.rvz.reads.json" });
+  await disc.close();
+
+  const none = fakeFetcher(src);
+  none.setOrder = () => assert.fail("no order without one");
+  const plain = await openRangeDisc(src, {
+    opfs: true, getRoot: async () => new FakeDirectory(), estimate: roomy, createFetcher: () => none,
+    loadOrder: async () => ({ blocks: null, reason: null })
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(plain.stats.readOrder, null, "a 404: nothing changes");
+  await plain.close();
+
+  const logs = [];
+  const streaming = await openRangeDisc(src, {
+    opfs: false, createFetcher: () => fakeFetcher(src), log: (m) => logs.push(m),
+    loadOrder: () => assert.fail("not fetched: nothing would use it")
+  });
+  assert.ok(logs.some((m) => /no read order: no sequential stream \(turned off \(\?opfs=0\)\)/.test(m)), logs.join(" | "));
+  await streaming.close();
 });
 
 test("progress is persisted on a timer and the whole copy survives a reopen", async () => {

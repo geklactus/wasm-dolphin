@@ -44,11 +44,74 @@ const SPACE_MARGIN = 64 * 1024 * 1024;
 
 const encoder = new TextEncoder();
 
-/** ?prefetch=0 turns the sequential fetcher off, ?opfs=0 the copy on this device. */
+/**
+ * ?prefetch=0 turns the sequential fetcher off, ?opfs=0 the copy on this device;
+ * ?recordreads=1 keeps the order the core reads the disc's blocks in (readOrder below).
+ */
 export function readRemoteDiscFlags(search) {
   const params = new URLSearchParams(search);
-  const off = (name) => ["0", "false", "off", "no"].includes((params.get(name) ?? "").toLowerCase());
-  return { prefetch: !off("prefetch"), opfs: !off("opfs") };
+  const value = (name) => (params.get(name) ?? "").toLowerCase();
+  const off = (name) => ["0", "false", "off", "no"].includes(value(name));
+  const on = (name) => ["1", "true", "on", "yes"].includes(value(name));
+  return { prefetch: !off("prefetch"), opfs: !off("opfs"), recordReads: on("recordreads") };
+}
+
+// ── the read order: which blocks a title reads first ──
+// The sequential fetcher pulls the image from its first block to its last, so in a
+// first launch it can be fetching the end of the disc while the game wants the middle.
+// A read order, recorded once per disc file with ?recordreads=1 (the blocks the core
+// touched, each once, in the order it first touched them) and kept beside the disc as
+// <disc file>.reads.json, puts those blocks first: the fetcher takes them in that order,
+// then the rest from the start. It is block numbers and times only -- nothing of the
+// game -- so it can live in a repository. Without one (a 404, the normal case) nothing
+// changes; one made for another file (another size or block size) is ignored.
+export const READ_ORDER_VERSION = 1;
+
+/** Where a disc's read order is kept: beside it, its file name + ".reads.json". */
+export function readOrderUrl(discUrl) {
+  const url = new URL(discUrl, globalThis.location?.href ?? "http://localhost/");
+  url.pathname += ".reads.json";
+  url.search = "";
+  url.hash = "";
+  return url.href;
+}
+
+/**
+ * The blocks of a read-order file that apply to this disc, in order, each once:
+ * { blocks } -- or { blocks: null, reason } when the file is for another disc or isn't one.
+ */
+export function parseReadOrder(json, { size, blockSize = RANGE_BLOCK }) {
+  if (!json || json.v !== READ_ORDER_VERSION || !Array.isArray(json.blocks)) return { blocks: null, reason: "not a read order this page knows" };
+  if (Number(json.size) !== Number(size) || Number(json.block) !== Number(blockSize)) {
+    return { blocks: null, reason: `made for another file (${json.size} bytes in ${json.block}-byte blocks, not ${size} in ${blockSize})` };
+  }
+  const count = blockCount(size, blockSize);
+  const seen = new Uint8Array(count);
+  const blocks = [];
+  for (const b of json.blocks) {
+    if (Number.isInteger(b) && b >= 0 && b < count && !seen[b]) {
+      seen[b] = 1;
+      blocks.push(b);
+    }
+  }
+  return { blocks, reason: null };
+}
+
+/** Fetch and check a disc's read order: { blocks, reason }; blocks null when there is none (404) or it doesn't apply. */
+export async function loadReadOrder(source, { fetchImpl = (...args) => fetch(...args), blockSize = RANGE_BLOCK } = {}) {
+  let response;
+  try {
+    response = await fetchImpl(readOrderUrl(source.url), { credentials: "same-origin", cache: "no-store" });
+  } catch (error) {
+    return { blocks: null, reason: `not fetched (${error?.message || error})` };
+  }
+  if (response.status === 404) return { blocks: null, reason: null };
+  if (!response.ok) return { blocks: null, reason: `HTTP ${response.status}` };
+  try {
+    return parseReadOrder(await response.json(), { size: source.size, blockSize });
+  } catch (error) {
+    return { blocks: null, reason: `not JSON (${error?.message || error})` };
+  }
 }
 
 export function blockCount(size, blockSize = RANGE_BLOCK) {
@@ -571,6 +634,7 @@ export class RangeDisc {
     store = null,
     storeReason = null,
     prefetch = true,
+    recordReads = false,
     readError = (error) => error,
     log = () => {},
     now = () => performance.now(),
@@ -608,8 +672,34 @@ export class RangeDisc {
     this.closed = false;
     this.changed = false;
     this.completeSeen = Boolean(store?.remote && store.complete);
+    // ?recordreads=1: each block the core reads, the first time it reads it, and when
+    this.recording = recordReads ? { since: this.now(), seen: new Uint8Array(this.blockCount), blocks: [], seconds: [] } : null;
+    this.order = null;                       // { blocks, from } once a read order is in use
     fetcher.onReady = () => this.consumeReady();
     this.updateSequential();
+  }
+
+  record(index) {
+    const rec = this.recording;
+    if (!rec || rec.seen[index]) return;
+    rec.seen[index] = 1;
+    rec.blocks.push(index);
+    rec.seconds.push(Math.round((this.now() - rec.since) / 100) / 10);
+  }
+
+  /** The read order recorded so far (?recordreads=1), in the form readOrderUrl() serves; null when not recording. */
+  readOrder() {
+    const rec = this.recording;
+    if (!rec) return null;
+    return { v: READ_ORDER_VERSION, name: this.name, size: this.size, block: this.blockSize, blocks: rec.blocks.slice(), seconds: rec.seconds.slice() };
+  }
+
+  /** Hand the fetcher a read order: the sequential stream takes these blocks first. */
+  useReadOrder(blocks, from) {
+    if (this.closed || !blocks?.length) return;
+    this.order = { blocks: blocks.length, from };
+    this.fetcher.setOrder?.(blocks);
+    this.log(`read order from ${from}: ${blocks.length} blocks first`);
   }
 
   slice(start = 0, end = this.size) {
@@ -625,6 +715,7 @@ export class RangeDisc {
         const i = Math.floor(pos / this.blockSize);
         const from = pos - i * this.blockSize;
         const n = Math.min(blockLength(i, this.size, this.blockSize) - from, end - pos);
+        if (this.recording) this.record(i);
         this.readInto(i, from, out.subarray(off, off + n));
         pos += n;
         off += n;
@@ -854,6 +945,8 @@ export class RangeDisc {
       transport: this.fetcher.kind,
       writer: this.store ? (this.store.remote ? "fetch worker" : "discio worker") : null,
       busy: Object.fromEntries(Object.entries(this.busy).map(([k, v]) => [k, Math.round(v)])),
+      readOrder: this.order,
+      recorded: this.recording ? this.recording.blocks.length : null,
       fetchWorkerBusy: this.fetcher.busy?.() ?? null
     };
   }
@@ -884,6 +977,7 @@ export class RangeDisc {
 export async function openRangeDisc(source, {
   opfs = true,
   prefetch = true,
+  loadOrder = null,                          // e.g. loadReadOrder: where this disc's read order comes from
   getRoot = null,
   estimate = null,
   createFetcher,
@@ -922,5 +1016,16 @@ export async function openRangeDisc(source, {
     }
   }
   if (!store) log(`streaming from the network: ${storeReason}`);
-  return new RangeDisc(source, { fetcher, store, storeReason, prefetch, log, ...options });
+  const disc = new RangeDisc(source, { fetcher, store, storeReason, prefetch, recordReads: Boolean(source.recordReads), log, ...options });
+  // The read order, if the disc has one beside it: not waited for (a 404 is the normal case).
+  // Only the sequential stream uses it, and there is none without this device's copy.
+  if (loadOrder && !(prefetch && store)) {
+    log(`no read order: no sequential stream (${!prefetch ? "?prefetch=0" : storeReason})`);
+  } else if (loadOrder) {
+    loadOrder(source).then(({ blocks, reason }) => {
+      if (blocks) disc.useReadOrder(blocks, readOrderUrl(source.url).split("/").pop());
+      else if (reason) log(`read order not used: ${reason}`);
+    }, () => {});
+  }
+  return disc;
 }

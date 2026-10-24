@@ -229,6 +229,8 @@ export class DiscFetcher {
     this.cap = 0;
     this.nextSequentialAt = 0;
     this.cursor = 0;
+    this.order = [];                    // a read order (remote-disc.js): blocks the sequential stream takes first
+    this.orderAt = 0;
     this.failures = 0;
     this.pausedUntil = 0;
     this.timer = null;
@@ -247,9 +249,14 @@ export class DiscFetcher {
         this.cap = Math.max(0, Number(message.cap) || 0);
         this.nextSequentialAt = 0;
         this.cursor = 0;
+        this.orderAt = 0;
         if (!this.sequential) {
           for (const req of [...this.inflight.values()]) if (req.kind === KIND_SEQUENTIAL) this.abort(req);
         }
+        return this.pump();
+      case "order":
+        this.order = (message.blocks ?? []).filter((b) => Number.isInteger(b) && b >= 0 && b < this.blocks);
+        this.orderAt = 0;
         return this.pump();
       case "freed":
         return this.pump();
@@ -576,6 +583,12 @@ export class DiscFetcher {
       this.wakeAt(this.nextSequentialAt);
       return null;
     }
+    // A read order's blocks first, in its order; then the rest from the start
+    while (this.orderAt < this.order.length && this.present(this.order[this.orderAt])) this.orderAt += 1;
+    for (let k = this.orderAt; k < this.order.length; k++) {
+      const block = this.order[k];
+      if (!this.present(block) && !this.busy(block)) return { block, kind: KIND_SEQUENTIAL };
+    }
     while (this.cursor < this.blocks && this.present(this.cursor)) this.cursor += 1;
     for (let block = this.cursor; block < this.blocks; block++) {
       if (!this.present(block) && !this.busy(block)) return { block, kind: KIND_SEQUENTIAL };
@@ -821,6 +834,10 @@ export class FetchWorkerClient {
     this.port.postMessage({ type: "sequential", on: Boolean(on), cap });
   }
 
+  setOrder(blocks) {
+    this.port.postMessage({ type: "order", blocks: Array.from(blocks) });
+  }
+
   get changed() {
     return (Atomics.load(this.ctl, H_FLAGS) & FLAG_CHANGED) !== 0;
   }
@@ -943,6 +960,8 @@ export class InlineFetcher {
   }
 
   setSequential() {}
+
+  setOrder() {}
 
   counters() {
     return { ...this.stats };

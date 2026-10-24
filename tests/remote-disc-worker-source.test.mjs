@@ -15,13 +15,14 @@ function extractFunction(source, name) {
 }
 
 test("the worker mounts a posted ?disc= source through a RangeDisc and a range-aware reader", () => {
-  assert.match(worker, /import \{ openRangeDisc \} from "\.\/remote-disc\.js";/);
+  assert.match(worker, /import \{ loadReadOrder, openRangeDisc \} from "\.\/remote-disc\.js";/);
+  assert.match(extractFunction(worker, "openRemoteDisc"), /loadOrder: \(disc\) => loadReadOrder\(disc\),/, "the read order beside the disc");
   assert.match(worker, /import \{ createDiscFetcher \} from "\.\/remote-disc-fetch\.js";/);
   const mount = extractFunction(worker, "mountFile");
   assert.match(mount, /if \(file\.url\) \{\s*data = await openRemoteDisc\(file, \{ gameRunning: true \}\);\s*installRangeAwareReader\(workerFs\);/);
   assert.match(mount, /fs\.mount\(workerFs, \{ blobs: \[\{ name: safeName, data \}\] \}, WORKERFS_MOUNT_DIR\);/);
   assert.ok(mount.indexOf("fs.unmount(WORKERFS_MOUNT_DIR)") < mount.indexOf("openRemoteDisc"), "the old mount goes first");
-  for (const type of ["discPrepare", "discStats", "discRemove", "discFlush"]) {
+  for (const type of ["discPrepare", "discStats", "discRemove", "discFlush", "discReads"]) {
     assert.match(worker, new RegExp(`case "${type}":`), type);
   }
 });

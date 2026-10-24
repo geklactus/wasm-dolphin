@@ -44,8 +44,8 @@
     {
       "path": "src/app.js",
       "hashMode": "lf-normalized",
-      "size": 66198,
-      "sha256": "a1e330a34143ee5badeb1fcd5111c496e946f914001527e3a35879b62da71113"
+      "size": 68027,
+      "sha256": "bc530d1dedf63db72368ec0c5aec05810ddc88ae6a10066d05c0727bae98329a"
     },
     {
       "path": "src/audio.js",
@@ -134,8 +134,8 @@
     {
       "path": "src/upstream-discio-worker.js",
       "hashMode": "lf-normalized",
-      "size": 641073,
-      "sha256": "bf74139c0ab52e9e62324cee2fe55ffa78a49bfa27d28c0ab1b5264379f943fc"
+      "size": 641213,
+      "sha256": "219f05f15bfb08a9d6f921b9ece8246441949a264c7898ad78203bce8013917c"
     },
     {
       "path": "src/wgpu-renderer-worker-probe.js",
@@ -520,6 +520,7 @@
       "configureAudioWorklet",
       "discFlush",
       "discPrepare",
+      "discReads",
       "discRemove",
       "discStats",
       "load",
