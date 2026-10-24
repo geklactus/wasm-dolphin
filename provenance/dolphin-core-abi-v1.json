@@ -44,8 +44,8 @@
     {
       "path": "src/app.js",
       "hashMode": "lf-normalized",
-      "size": 52543,
-      "sha256": "03542b145a81ca69497233b267a91dc931511541a0ce2dd7b2e96c73e5b230b2"
+      "size": 66198,
+      "sha256": "a1e330a34143ee5badeb1fcd5111c496e946f914001527e3a35879b62da71113"
     },
     {
       "path": "src/audio.js",
@@ -80,8 +80,8 @@
     {
       "path": "src/core-host.js",
       "hashMode": "lf-normalized",
-      "size": 68445,
-      "sha256": "6b0db53fd1850b1dd200361a7802618bf6747d622c42e0da636f4d22ac88273b"
+      "size": 69309,
+      "sha256": "3d64a28cd58b23e821a9474670babc802d54f9d2ba61bcb05fc9040bb86a6de5"
     },
     {
       "path": "src/diagnostic-log-filter.js",
@@ -134,8 +134,8 @@
     {
       "path": "src/upstream-discio-worker.js",
       "hashMode": "lf-normalized",
-      "size": 637792,
-      "sha256": "8a4dea0f105217bac5183e2aa92b00f2dc432a47815afb833fecb65df66faaef"
+      "size": 641073,
+      "sha256": "bf74139c0ab52e9e62324cee2fe55ffa78a49bfa27d28c0ab1b5264379f943fc"
     },
     {
       "path": "src/wgpu-renderer-worker-probe.js",
@@ -518,6 +518,10 @@
     "requestTypes": [
       "bootProbe",
       "configureAudioWorklet",
+      "discFlush",
+      "discPrepare",
+      "discRemove",
+      "discStats",
       "load",
       "loadState",
       "loadStateFile",
