@@ -6,7 +6,7 @@
 //
 //   node tools/remote-disc-bench.mjs [--size-mb 1400] [--delay-ms 40] [--bw-mbit 100]
 //        [--duration 240] [--scenarios before,first,second,noprefetch,downloadfirst]
-//        [--per-request-bw] [--trace heavy|light] [--seed 1] [--headed] [--out <dir>]
+//        [--per-request-bw] [--trace heavy|light|menus] [--seed 1] [--headed] [--out <dir>]
 //        [--port 8095]
 //
 // --bw-mbit 0 is unlimited. The link is shared by every disc response at once, as a
@@ -97,6 +97,7 @@ function mulberry32(seed) {
 // waited a dozen times.
 function makeTrace({ size, duration, seed, kind = "heavy" }) {
   if (kind === "light") return makeLightTrace({ size, duration, seed });
+  if (kind === "menus") return makeMenuTrace({ size, duration, seed });
   const rnd = mulberry32(seed);
   const loads = [];
   const between = (a, b) => a + rnd() * (b - a);
@@ -143,6 +144,41 @@ function makeLightTrace({ size, duration, seed }) {
     add(t, anywhere(20 << 20), Math.round(between(8 << 20, 20 << 20)), "course");
     const small = 2 + Math.floor(rnd() * 3);
     for (let i = 0; i < small; i++) add(t + 500 + i * 300, anywhere(1 << 20), Math.round(between(64 << 10, 1 << 20)), "course-file");
+  }
+  return loads.sort((a, b) => a.t - b.t);
+}
+
+// "menus": a boot, then the title's menus -- small files (16 KiB to 1 MiB, most of them
+// under 256 KiB) every few seconds, a third of them right after the one before. Nearer a
+// cold boot into the menus, where each wait is a small read in a block not yet here.
+function makeMenuTrace({ size, duration, seed }) {
+  const rnd = mulberry32(seed);
+  const loads = [];
+  const between = (a, b) => a + rnd() * (b - a);
+  const small = () => Math.round(Math.exp(between(Math.log(16 << 10), Math.log(1 << 20))) / 2048) * 2048;
+  const anywhere = (length) => Math.floor((rnd() * Math.max(0, size - length)) / 2048) * 2048;
+  const add = (t, offset, length, kind) => {
+    if (t >= duration * 1000) return;
+    loads.push({ t: Math.round(t), offset, length: Math.min(length, size - offset), kind });
+  };
+  add(0, 0, 0x8010, "header");
+  add(200, 0x2440, 0x30000, "apploader");
+  add(400, Math.floor(size * 0.0004 / 2048) * 2048, 1 << 20, "fst");
+  add(700, anywhere(4 << 20), 4 << 20, "dol");
+  let last = 0;
+  for (let i = 0; i < 6; i++) {
+    const length = small();
+    last = anywhere(length);
+    add(1500 + i * 500, last, length, "boot");
+  }
+  for (let t = 8000; t < duration * 1000; t += between(4000, 10000)) {
+    const files = 1 + Math.floor(rnd() * 2);
+    for (let i = 0; i < files; i++) {
+      const length = small();
+      const offset = rnd() < 0.33 ? Math.min(size - length, last + 2048 * Math.floor(between(1, 64))) : anywhere(length);
+      add(t + i * 200, offset, length, "menu");
+      last = offset + length;
+    }
   }
   return loads.sort((a, b) => a.t - b.t);
 }
@@ -344,6 +380,8 @@ async function run(cfg) {
     maxReadMs: Math.round(Math.max(0, ...slices.map(([, dt]) => dt))),
     maxReadMsAfter90: Math.round(Math.max(0, ...after(90000).map(([, dt]) => dt))),
     waitTimes: waited(slices).map(([t, dt]) => [Math.round(t), Math.round(dt)]),
+    waitP50: Math.round(percentile(waited(slices).map(([, dt]) => dt), 0.5)),
+    waitP90: Math.round(percentile(waited(slices).map(([, dt]) => dt), 0.9)),
     lagP50: +percentile(lagValues, 0.5).toFixed(2),
     lagP99: +percentile(lagValues, 0.99).toFixed(2),
     lagMax: Math.round(Math.max(0, ...lagValues)),
@@ -523,12 +561,12 @@ function mb(bytes) {
 
 function table(results) {
   const rows = [
-    "| scenario | waits (all) | waited (all) | waits after 90 s | waited after 90 s | longest read | network MB (server) | timer lag outside waits: p99 / max / ticks > 8 ms | on device at end | whole disc by |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+    "| scenario | waits (all) | waited (all) | per wait: median / p90 | waits after 90 s | waited after 90 s | longest read | network MB (server) | timer lag outside waits: p99 / max / ticks > 8 ms | on device at end | whole disc by |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
   ];
   for (const r of results) {
     const device = r.stats?.mode === "cached" ? `${mb(r.stats.storedBytes)} MB` : (r.stats?.mode ?? "memory only");
-    rows.push(`| ${r.label} | ${r.waits} | ${(r.waitMs / 1000).toFixed(1)} s | ${r.waitsAfter90} | ${(r.waitMsAfter90 / 1000).toFixed(1)} s | ${r.maxReadMs} ms | ${mb(r.server.bytes)} | ${r.busyLagP99} / ${r.busyLagMax} ms / ${r.busyTicksOver8} of ${r.ticks} | ${device} | ${r.completeAt == null ? "-" : `${Math.round(r.completeAt)} s`}${r.downloadMs != null ? ` (+${Math.round(r.downloadMs / 1000)} s before start)` : ""} |`);
+    rows.push(`| ${r.label} | ${r.waits} | ${(r.waitMs / 1000).toFixed(1)} s | ${r.waitP50} / ${r.waitP90} ms | ${r.waitsAfter90} | ${(r.waitMsAfter90 / 1000).toFixed(1)} s | ${r.maxReadMs} ms | ${mb(r.server.bytes)} | ${r.busyLagP99} / ${r.busyLagMax} ms / ${r.busyTicksOver8} of ${r.ticks} | ${device} | ${r.completeAt == null ? "-" : `${Math.round(r.completeAt)} s`}${r.downloadMs != null ? ` (+${Math.round(r.downloadMs / 1000)} s before start)` : ""} |`);
   }
   return rows.join("\n");
 }
@@ -546,7 +584,10 @@ for (const name of options.scenarios) {
   const result = await runScenario(playwright, name, trace);
   results.push(result);
   const busy = result.stats?.busy ? ` · discio worker busy ${JSON.stringify(result.stats.busy)} · fetch worker ${JSON.stringify(result.stats.fetchWorkerBusy)} · writer ${result.stats.writer}` : "";
-  console.log(`${name}: waits ${result.waits} (${(result.waitMs / 1000).toFixed(1)} s), after 90 s ${result.waitsAfter90} (${(result.waitMsAfter90 / 1000).toFixed(1)} s), network ${mb(result.server.bytes)} MB, bad ${result.badSlices}, ${Math.round((Date.now() - t) / 1000)} s${busy}`);
+  const d = result.stats?.demand;
+  const demand = d ? ` · demand: ${d.progressWaits} of the waits on a block already arriving (${(d.progressMs / 1000).toFixed(1)} s), ${d.blocks} blocks whole in ${d.blocks ? Math.round(d.blockMs / d.blocks) : 0} ms each, ${d.windowFirst} window-first, ${d.restarts} restarts` : "";
+  const link = result.stats?.link ? ` · link ${result.stats.link.mbit} Mbit/s, first bytes ${result.stats.link.rttMs} ms (min ${result.stats.link.rttMinMs})` : "";
+  console.log(`${name}: waits ${result.waits} (${(result.waitMs / 1000).toFixed(1)} s), after 90 s ${result.waitsAfter90} (${(result.waitMsAfter90 / 1000).toFixed(1)} s), network ${mb(result.server.bytes)} MB, bad ${result.badSlices}, ${Math.round((Date.now() - t) / 1000)} s${busy}${demand}${link}`);
 }
 server.close();
 const summary = { options: { ...options, size: SIZE, link, traceLoads: trace.length, traceBytes }, results };

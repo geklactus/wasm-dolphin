@@ -13,11 +13,12 @@
 //       bitmap says what is there, never the file's size;
 //   L3  HTTP Range requests, made by a fetch worker (remote-disc-fetch.js).
 //
-// A read checks L1, then L2, then waits on L3, and every block that arrives from L3 is
-// written to L2. Meanwhile the fetch worker pulls the image into L2 in order, at most
-// two requests in flight, and parks that stream whenever the core is waiting on a miss.
-// After the first minutes nothing waits, and a second launch reads nothing from the
-// network. Nothing here runs on import; the page imports the cache listing too.
+// A read checks L1, then L2, then waits on L3 -- for the bytes it needs, not their whole
+// block -- and every block that arrives whole from L3 is written to L2 (L1 and L2 only
+// ever hold whole blocks). Meanwhile the fetch worker pulls the image into L2 in order,
+// at most two requests in flight, and parks that stream whenever the core is waiting on
+// a miss. After the first minutes nothing waits, and a second launch reads nothing from
+// the network. Nothing here runs on import; the page imports the cache listing too.
 
 export const RANGE_BLOCK = 4 * 1024 * 1024;
 export const RANGE_CACHE_BLOCKS = 64;
@@ -660,6 +661,10 @@ export class RangeDisc {
     this.gameRunning = false;
     this.waits = 0;
     this.waitMs = 0;
+    this.lastWaitMs = 0;
+    this.progressWaits = 0;                  // waits on a block a read before was already waiting on
+    this.progressMs = 0;
+    this.fillingHits = 0;                    // reads answered from a block still arriving, without waiting
     this.l1Hits = 0;
     this.l2Hits = 0;
     this.readyHits = 0;
@@ -728,8 +733,13 @@ export class RangeDisc {
     return { size: out.length, buffer: out.buffer };
   }
 
-  // L1, then L2, then L3. Whatever L3 returns goes to L1 (as the in-memory reader always
-  // did) and to L2.
+  // L1, then L2, then L3. L3 is asked for the window this read needs (`from`, the view's
+  // length) and answers as soon as it has arrived; a block that had arrived whole goes to
+  // L1 (as the in-memory reader always did) and to L2. A block still arriving stays out
+  // of both: L1 and L2 only ever hold whole blocks, so a read is never served from a
+  // block's filled part here. A later read into it goes back to the fetcher, which
+  // answers from the same slot (no second request); once whole, the block comes back
+  // through consumeReady() into L1 and L2.
   readInto(index, from, view) {
     const cached = this.blocks.get(index);
     if (cached) {
@@ -751,17 +761,28 @@ export class RangeDisc {
       }
     }
     const t0 = this.now();
-    const { bytes, waited } = this.fetcher.demand(index);
+    const got = this.fetcher.demand(index, from, view.length);
     this.lastAhead = -1;
-    if (waited) {
+    if (got.waited) {
+      const ms = this.now() - t0;
       this.waits++;
-      this.waitMs += this.now() - t0;
+      this.waitMs += ms;
+      this.lastWaitMs = ms;
+      if (got.follow) {
+        this.progressWaits++;
+        this.progressMs += ms;
+      }
+    } else if (got.filling) {
+      this.fillingHits++;
     } else {
       this.readyHits++;
     }
-    this.keep(index, bytes);
-    this.storeBlock(index, bytes);
-    view.set(bytes.subarray(from, from + view.length));
+    const at = got.from ?? 0;
+    if (at === 0 && got.bytes.length === blockLength(index, this.size, this.blockSize)) {
+      this.keep(index, got.bytes);
+      this.storeBlock(index, got.bytes);
+    }
+    view.set(got.bytes.subarray(from - at, from - at + view.length));
   }
 
   // One block ahead of every read, as the in-memory reader did: a file read straight
@@ -933,6 +954,25 @@ export class RangeDisc {
       l1Hits: this.l1Hits,
       l2Hits: this.l2Hits,
       readyHits: this.readyHits,
+      fillingHits: this.fillingHits,
+      // Per demand: reads that waited on the network and how long until the window they
+      // needed had arrived (the same as waits/waitMs), how many of them waited on a block
+      // already arriving for a read before them; blocks a read waited on, once whole, and
+      // the time from the first read's demand to the whole block; requests that began at
+      // a window ahead of the block's start, and that restarted at a later read's window.
+      demand: {
+        waits: this.waits,
+        windowMs: Math.round(this.waitMs),
+        lastWindowMs: Math.round(this.lastWaitMs),
+        progressWaits: this.progressWaits,
+        progressMs: Math.round(this.progressMs),
+        blocks: counters.blocks ?? 0,
+        blockMs: Math.round(counters.blockMs ?? 0),
+        lastBlockMs: Math.round(counters.lastBlockMs ?? 0),
+        windowFirst: counters.windowFirst ?? 0,
+        restarts: counters.restarts ?? 0
+      },
+      link: this.linkStats(),
       salvagedBytes: counters.salvaged,
       aborts: counters.aborts,
       mode: this.store ? "cached" : "streaming",
@@ -948,6 +988,19 @@ export class RangeDisc {
       readOrder: this.order,
       recorded: this.recording ? this.recording.blocks.length : null,
       fetchWorkerBusy: this.fetcher.busy?.() ?? null
+    };
+  }
+
+  // The fetcher's estimate of the link, for tuning: throughput while a response is
+  // arriving and time to its first bytes (which includes the server's own); null until
+  // it has one.
+  linkStats() {
+    const link = this.fetcher.link?.();
+    if (!link || !(link.bytesPerSecond > 0 || link.rttMs > 0)) return null;
+    return {
+      mbit: Math.round((link.bytesPerSecond * 8) / 1e5) / 10,
+      rttMs: Math.round(link.rttMs),
+      rttMinMs: Math.round(link.rttMinMs)
     };
   }
 
