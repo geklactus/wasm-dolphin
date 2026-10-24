@@ -91,6 +91,48 @@ back.
 Without `SharedArrayBuffer` or nested workers, the reader falls back to the old
 behaviour (synchronous XHR per miss, one block ahead) with no sequential stream.
 
+## The read order (`<disc file>.reads.json`)
+
+The sequential stream pulls the image from its first block to its last, so on a
+first launch it can be fetching the end of the disc while the game wants the
+middle, and each block the game reaches first is a miss. A **read order** puts
+the blocks a title reads first at the front of the stream.
+
+- **Recording.** With `?recordreads=1` the reader notes each block the core
+  reads, the first time it reads it, with the seconds since the disc was opened.
+  *Save read order* (in the Game block, shown only with the flag) downloads it as
+  `<GAMEID>.reads.json`; `window.__discReadOrder()` returns the same object for
+  harnesses (`tools/probe.mjs --record` in dolphin-browser saves one from a
+  scripted session). It is `{ v, game, name, size, block, blocks, seconds }`:
+  block numbers and times, nothing of the game.
+- **Use.** Kept beside the disc as `<disc file>.reads.json` (for
+  `mkw.rvz`, `mkw.rvz.reads.json`), it is fetched once when the disc opens, not
+  waited for. The fetch worker's sequential stream then takes its blocks in its
+  order, skipping any already here, and the rest from the start as before.
+  Misses and the block ahead still go first. A 404 is the normal case and changes
+  nothing; a file made for another image (another size or block size) is ignored
+  and logged.
+- **Only with this device's copy.** The order steers the sequential stream, and
+  there is none with `?opfs=0` or `?prefetch=0` (the log says so). In those modes
+  a read order has no effect.
+
+Measured with Mario Kart Wii (`mkw.rvz`, 672 blocks) on a shared 100 Mbit/s link
+with 40 ms to first byte, two cold launches each (a fresh browser profile, so
+nothing on this device), dolphin-browser's `tools/probe.mjs` driving the same
+session (boot, then A now and then, into the title's menus); the order was
+recorded once from that session at full speed (39 blocks).
+In the first 90 s:
+
+| | waits | wait time |
+|---|---|---|
+| no read order | 14, 14 | 5.33 s, 5.27 s |
+| with `mkw.rvz.reads.json` | 3, 3 | 1.16 s, 1.15 s |
+| `?opfs=0`, no read order | 18, 19 | 6.75 s, 7.50 s |
+| `?opfs=0`, with it (not used) | 17, 17 | 6.63 s, 6.72 s |
+
+With the copy on this device, game speed was the same (median 100–101 %) and the
+network bytes within 3 %.
+
 ## Invalidation, eviction, space
 
 - **The source changed** (size, `ETag` or `Last-Modified` differ from the
@@ -124,6 +166,7 @@ removable. `window.__discStats` carries the worker's numbers for harnesses.
 |---|---|
 | `?prefetch=0` | no sequential stream (misses and the block ahead still land on this device) |
 | `?opfs=0` | no copy on this device (memory and network only; no sequential stream, since it has nowhere to go) |
+| `?recordreads=1` | keep the order the core first reads each block in; *Save read order* downloads it as `<GAMEID>.reads.json` (see above) |
 
 ## Measuring
 

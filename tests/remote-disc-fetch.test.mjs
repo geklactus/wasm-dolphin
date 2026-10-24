@@ -262,6 +262,25 @@ test("the sequential stream goes in order, skips blocks already here, and report
   assert.equal(Atomics.load(t.ctl, 5), SEQ_DONE);
 });
 
+test("a read order goes first, skipping what is here or on its way; then the rest from the start", async () => {
+  const t = setup();
+  t.bitmap.set(5);
+  t.fetcher.handle({ type: "order", blocks: [5, 3, 99, -1, 1.5, 6] });   // 5 is here; the junk is dropped
+  t.fetcher.handle({ type: "sequential", on: true, cap: 0 });
+  assert.deepEqual(t.net.live().map((c) => c.start), [48, 96]);          // blocks 3 and 6
+  for (let round = 0; round < 6 && t.bitmap.present < t.bitmap.count; round++) {
+    for (const call of t.net.live()) {
+      call.push();
+      call.finish();
+    }
+    await settle();
+    for (let s = 1; s < t.layout.slots; s++) if (t.slot(s).state === SLOT_READY) t.consume(s);
+  }
+  assert.equal(t.bitmap.complete, true);
+  assert.deepEqual(t.net.calls.map((c) => c.start / BLOCK), [3, 6, 0, 1, 2, 4]);
+  assert.equal(Atomics.load(t.ctl, 5), SEQ_DONE);
+});
+
 test("the cap paces sequential starts; misses and blocks ahead are not held to it", () => {
   const t = setup();
   t.fetcher.handle({ type: "sequential", on: true, cap: BLOCK });   // one block a second

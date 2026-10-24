@@ -71,6 +71,7 @@ const elements = {
   discLibraryList: document.querySelector("#discLibraryList"),
   discLibraryTotal: document.querySelector("#discLibraryTotal"),
   discNetNote: document.querySelector("#discNetNote"),
+  discReadsButton: document.querySelector("#discReadsButton"),
   discRemoveButton: document.querySelector("#discRemoveButton"),
   dropBadge: document.querySelector("#dropBadge"),
   dropZone: document.querySelector("#dropZone"),
@@ -1389,6 +1390,11 @@ function wireRemoteDisc() {
     try { localStorage.setItem(DISC_DOWNLOAD_FIRST_KEY, elements.discDownloadFirst.checked ? "1" : "0"); } catch {}
   });
   elements.discRemoveButton.addEventListener("click", () => removeDiscFromDevice(remoteDiscState.key, name));
+  if (flags.recordReads && elements.discReadsButton) {
+    elements.discReadsButton.hidden = false;
+    elements.discReadsButton.addEventListener("click", saveReadOrder);
+  }
+  window.__discReadOrder = currentReadOrder;
   window.addEventListener("pagehide", flushRemoteDisc);
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushRemoteDisc(); });
 
@@ -1610,6 +1616,37 @@ async function refreshDiscLibrary() {
   }
   elements.discLibraryList.replaceChildren(...rows);
   elements.discLibraryTotal.textContent = discs.length ? `${discs.length} · ${formatDiscBytes(total)}` : "";
+}
+
+// ?recordreads=1: the order the core has read this disc's blocks in so far, as a
+// <GAMEID>.reads.json -- block numbers and times, nothing of the game. Kept beside the disc
+// file as <disc file>.reads.json, it puts those blocks first in the sequential stream of
+// every later first launch (src/remote-disc.js). tools/probe.mjs in dolphin-browser saves
+// one from a scripted session through window.__discReadOrder.
+async function currentReadOrder() {
+  const response = await host.discRequest("discReads").catch(() => null);
+  const reads = response?.reads;
+  if (!reads) return null;
+  let game = null;
+  try { game = remoteDiscState.disc ? await readGameId(remoteDiscState.disc) : null; } catch { /* no header: the file name will do */ }
+  return { v: reads.v, game, name: reads.name, size: reads.size, block: reads.block, blocks: reads.blocks, seconds: reads.seconds };
+}
+
+async function saveReadOrder() {
+  const order = await currentReadOrder();
+  if (!order) {
+    setStatus("No read order yet: the disc hasn't been read with ?recordreads=1", "error");
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([JSON.stringify(order)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${order.game || order.name}.reads.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  setStatus(`Read order saved: ${order.blocks.length} blocks — keep it beside the disc as ${order.name}.reads.json`);
 }
 
 // The running disc's copy is released by the worker first (it holds the files open);
