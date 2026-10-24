@@ -1531,8 +1531,12 @@ async function renderDiscPanel(stats) {
     } else {
       line = `Streaming only: ${stats.reason || "no copy on this device"}`;
     }
+    // "· waited 13× (2.9 s, last 0.21 s) · link 18 Mbit/s, 95 ms": the last wait and the
+    // fetch worker's estimate of the link, once there is one (the rest is in __discStats).
+    const lastWait = stats.waits && stats.demand ? `, last ${(stats.demand.lastWindowMs / 1000).toFixed(2)} s` : "";
+    const link = stats.link?.mbit ? ` · link ${stats.link.mbit} Mbit/s, ${stats.link.rttMs} ms` : "";
     elements.discNetNote.textContent =
-      `${formatDiscBytes(stats.bytes)} from the network · waited ${stats.waits}× (${(stats.waitMs / 1000).toFixed(1)} s)`;
+      `${formatDiscBytes(stats.bytes)} from the network · waited ${stats.waits}× (${(stats.waitMs / 1000).toFixed(1)} s${lastWait})${link}`;
     elements.discRemoveButton.disabled = stats.mode !== "cached";
   } else if (!disc.opfs) {
     line = "Streaming only: turned off (?opfs=0)";

@@ -1,7 +1,7 @@
 // L3 for a remote disc: every HTTP request goes through a fetch worker of its own.
 //
 // Why a second worker: a read the core is waiting on has to be answered synchronously
-// (WORKERFS is synchronous), so the discio worker blocks until the block arrives. A
+// (WORKERFS is synchronous), so the discio worker blocks until the bytes arrive. A
 // fetch in the discio worker can't be aborted while it blocks -- the cancellation only
 // reaches the network once its event loop turns, which measured the same as not
 // aborting at all (a 4 MiB miss beside two streaming requests: 1.09 s aborted vs 1.11 s
@@ -11,17 +11,30 @@
 // The two workers share one SharedArrayBuffer (fetchSharedLayout):
 //   - a control block: the demand word (sequence << 2 | state), its answer, flags, and
 //     a small table of slots (state, block, bytes so far, kind);
-//   - counters (bytes received, requests, bytes salvaged from parked requests, aborts);
+//   - counters (bytes received, requests, bytes salvaged from parked requests, aborts,
+//     what demands waited for, and an estimate of the link);
 //   - the L2 bitmap, which only the discio worker writes and the fetcher reads to know
 //     what it need not fetch;
-//   - the slots' data, one block each. Slot 0 is the demand's own; the others hold the
-//     at most two requests in flight and finished blocks the discio worker hasn't taken.
+//   - the slots' data, one block each. Slot 0 is where a demand starts; the others hold
+//     the at most two requests in flight and finished blocks the discio worker hasn't
+//     taken.
 //
 // A miss: the discio worker takes the block from a finished slot if one has it, else
-// posts {demand} and waits on the demand word. The fetcher aborts every other request
-// (each keeps what it got; a later request resumes from there), continues the block if
-// it was already on its way or starts it in slot 0, and answers. Then it resumes: one
-// block ahead of the miss first, then the sequential stream.
+// posts {demand, block, from, len} -- the part of the core's read that falls in this
+// block, its window -- and waits on the demand word. The fetcher aborts every other
+// request (each keeps what it got; a later request resumes from there), continues the
+// block if it was already on its way or starts it, and answers as soon as the slot holds
+// the window, not the whole block: the discio worker copies those bytes and the core goes
+// on. A window well into the block is fetched first (from its start, aligned down to
+// 64 KiB, to the end of the block), then the start of the block. The block keeps the link
+// to itself until it is whole, and a later read into it waits on that same slot. Whole,
+// it is offered to the discio worker (into L1, as a miss's block always was) and written
+// to L2; then the fetcher resumes: one block ahead of the miss first, then the
+// sequential stream.
+//
+// A block can therefore fill out of order, so each slot keeps the ranges that have
+// arrived, not a high-water mark: a parked block resumes from its gaps, whichever order
+// they came in. L1 and L2 only ever get whole blocks.
 //
 // Where shared sync handles exist (SHARED_SYNC_MODE), the fetcher also writes this
 // device's copy: every block it fetches goes to OPFS from here, flushes and the bitmap
@@ -54,6 +67,13 @@ export const DEMAND_WAITING = 1;
 export const DEMAND_DONE = 2;
 export const DEMAND_FAILED = 3;
 
+// What an answer is (H_DEMAND_INFO): only the window (the block is still arriving), the
+// fetcher had to wait on the network for it, the read was into the block a read before it
+// was already waiting on (so it waited on that block's progress).
+export const INFO_WINDOW = 1;
+export const INFO_WAITED = 2;
+export const INFO_FOLLOW = 4;
+
 export const SEQ_OFF = 0;
 export const SEQ_RUNNING = 1;
 export const SEQ_PARKED = 2;
@@ -70,12 +90,21 @@ export const E_CHANGED = 5;
 export const DEMAND_SLOT = 0;
 export const DEFAULT_SLOTS = 1 + MAX_IN_FLIGHT + 2;
 
+// A window is fetched from its start aligned down to this; one in the block's first
+// 64 KiB is fetched from the start of the block.
+export const WINDOW_ALIGN = 64 * 1024;
+// A later read into the block being fetched for a read waits on that request when its
+// window is at most this far ahead of it (or a round trip's worth of bytes, if more);
+// further, the request restarts at the new window and the skipped part comes after.
+export const RESTART_MIN = 256 * 1024;
+
 const H_DEMAND = 0;
 const H_DEMAND_SLOT = 1;
 const H_DEMAND_ERROR = 2;
 const H_DEMAND_DETAIL = 3;
 const H_FLAGS = 4;
 const H_SEQ_STATE = 5;
+const H_DEMAND_INFO = 6;
 const HEADER_INTS = 8;
 const SLOT_INTS = 4;
 const S_STATE = 0;
@@ -92,9 +121,21 @@ const C_ABORTS = 3;
 const C_DEMANDS = 4;
 const C_WRITE_MS = 5;
 const C_PERSIST_MS = 6;
-const COUNTERS = 8;
+const C_RESTARTS = 7;          // requests restarted at a later read's window
+const C_WINDOW_FIRST = 8;      // requests that began at a window, ahead of a missing start
+const C_BLOCKS = 9;            // blocks a read waited on, once whole
+const C_BLOCK_MS = 10;         // ... from its first demand to the whole block: total
+const C_BLOCK_LAST_MS = 11;    // ... and the last one
+const C_LINK_BPS = 12;         // bytes per second while a response is arriving
+const C_RTT_MS = 13;           // time to a response's first bytes (smoothed)
+const C_RTT_MIN_MS = 14;       // ... and the shortest seen
+const COUNTERS = 16;
 const PERSIST_INTERVAL_MS = 5000;
 const META_INTERVAL_MS = 15000;
+// The link estimate forgets with this time constant (of time spent receiving), and says
+// nothing until it has seen this much.
+const LINK_TAU_MS = 3000;
+const LINK_MIN_MS = 200;
 
 export function demandWord(seq, state) {
   return ((seq & 0x1fffffff) << 2) | state;
@@ -147,9 +188,66 @@ export function parseContentRangeTotal(header) {
   return match ? Number(match[1]) : null;
 }
 
+// ── what part of a block a slot holds ──
+// Sorted, disjoint [start, end) pairs, block-relative. Adjacent or overlapping ranges
+// merge, so a window covered at all is covered by one range.
+
+export function addRange(ranges, start, end) {
+  if (!(end > start)) return ranges;
+  let i = 0;
+  while (i < ranges.length && ranges[i][1] < start) i++;
+  let j = i;
+  while (j < ranges.length && ranges[j][0] <= end) {
+    start = Math.min(start, ranges[j][0]);
+    end = Math.max(end, ranges[j][1]);
+    j++;
+  }
+  ranges.splice(i, j - i, [start, end]);
+  return ranges;
+}
+
+export function rangeBytes(ranges) {
+  let n = 0;
+  for (const [a, b] of ranges) n += b - a;
+  return n;
+}
+
+/** The first offset in [start, end) that has not arrived, or -1 when all of it has. */
+export function firstMissing(ranges, start, end) {
+  let at = start;
+  for (const [a, b] of ranges) {
+    if (b <= at) continue;
+    if (a > at) break;
+    at = b;
+  }
+  return at < end ? at : -1;
+}
+
+/**
+ * The next range to request for a block of `len` bytes: the gap holding (or after) the
+ * first missing byte at or after `prefer`, from that byte aligned down to `align`; with
+ * nothing missing after it, or no `prefer`, the first gap. Null when the block is whole.
+ */
+export function nextRange(ranges, len, prefer = null, align = WINDOW_ALIGN) {
+  let at = prefer == null ? -1 : firstMissing(ranges, Math.min(prefer, len), len);
+  const fromWindow = at >= 0;
+  if (!fromWindow) at = firstMissing(ranges, 0, len);
+  if (at < 0) return null;
+  let gapStart = 0;
+  let gapEnd = len;
+  for (const [a, b] of ranges) {
+    if (b <= at) gapStart = b;
+    else if (a > at) {
+      gapEnd = a;
+      break;
+    }
+  }
+  return [fromWindow ? Math.max(gapStart, at - (at % align)) : at, gapEnd];
+}
+
 // One Range request, its body handed over chunk by chunk as it arrives (so an abort
-// keeps what came). A response that isn't 206 is not read: with the Range ignored it
-// would be the whole image.
+// keeps what came, and a read can be answered before the end). A response that isn't
+// 206 is not read: with the Range ignored it would be the whole image.
 export async function httpFetchStream(url, start, end, signal, onChunk, fetchImpl = globalThis.fetch) {
   const response = await fetchImpl(url, {
     headers: { Range: `bytes=${start}-${end}` },
@@ -178,6 +276,10 @@ export async function httpFetchStream(url, start, end, signal, onChunk, fetchImp
 
 // The scheduler, in the fetch worker. Everything it is told arrives as a message; all
 // it tells the discio worker goes through the shared buffer (plus a "ready" nudge).
+//
+// Each slot has at most one request; a request fetches one range of its slot's block.
+// `urgent` is the block a read is waiting on, or was answered from and is still
+// arriving: while there is one, nothing else is fetched (the stream is parked).
 export class DiscFetcher {
   constructor({
     url,
@@ -195,7 +297,9 @@ export class DiscFetcher {
     clearTimer = (id) => clearTimeout(id),
     maxInFlight = MAX_IN_FLIGHT,
     demandRetries = 3,
-    retryBaseMs = 250
+    retryBaseMs = 250,
+    windowAlign = WINDOW_ALIGN,
+    restartMin = RESTART_MIN
   }) {
     this.url = url;
     this.size = size;
@@ -207,6 +311,8 @@ export class DiscFetcher {
     this.counters = views.counters;
     this.bitmap = views.bitmap;
     this.slotData = views.slots;
+    this.filled = Array.from({ length: layout.slots }, () => []);   // per slot: the ranges that have arrived
+    this.tainted = new Uint8Array(layout.slots);                    // a response said the disc changed: not for the copy
     this.etag = validators.etag ? String(validators.etag).replace(/^W\//, "") : null;
     this.lastModified = validators.lastModified ?? null;
     this.fetchStream = fetchStream;
@@ -221,9 +327,11 @@ export class DiscFetcher {
     this.maxInFlight = maxInFlight;
     this.demandRetries = demandRetries;
     this.retryBaseMs = retryBaseMs;
+    this.windowAlign = windowAlign;
+    this.restartMin = restartMin;
     this.inflight = new Map();          // slot -> request
-    this.parked = false;
-    this.demandReq = null;
+    this.demandReq = null;              // the read the discio worker is blocked on
+    this.urgent = null;                 // { block, from, since, retries }: the block a read needs, until whole
     this.aheadQueue = [];
     this.sequential = false;
     this.cap = 0;
@@ -236,12 +344,22 @@ export class DiscFetcher {
     this.timer = null;
     this.timerAt = Infinity;
     this.stopped = false;
+    this.receiving = 0;                 // requests past their first bytes, not ended
+    this.linkAt = null;
+    this.linkBytes = 0;
+    this.linkMs = 0;
+    this.rtt = 0;
+    this.rttMin = 0;
+  }
+
+  get parked() {
+    return this.urgent !== null;
   }
 
   handle(message) {
     switch (message?.type) {
       case "demand":
-        return this.demand(message.block, message.seq);
+        return this.demand(message.block, message.seq, message.from, message.len);
       case "ahead":
         return this.ahead(message.block);
       case "sequential":
@@ -364,6 +482,17 @@ export class DiscFetcher {
     return -1;
   }
 
+  // The slot with part of this block in it: arriving, else parked.
+  slotOf(block) {
+    const filling = this.findSlot(block, SLOT_FILLING);
+    return filling >= 0 ? filling : this.findSlot(block, SLOT_PARTIAL);
+  }
+
+  // The slot the discio worker is copying a window out of: answered, not yet taken.
+  pinned(s) {
+    return (Atomics.load(this.ctl, H_DEMAND) & 3) === DEMAND_DONE && Atomics.load(this.ctl, H_DEMAND_SLOT) === s;
+  }
+
   present(block) {
     return (Atomics.load(this.bitmap, block >> 3) & (1 << (block & 7))) !== 0;
   }
@@ -372,24 +501,90 @@ export class DiscFetcher {
     return this.findSlot(block, SLOT_FILLING) >= 0 || this.findSlot(block, SLOT_READY) >= 0;
   }
 
-  demand(block, seq) {
-    if (this.stopped) return;
+  covered(s, d) {
+    return firstMissing(this.filled[s], d.from, d.end) < 0;
+  }
+
+  // ── a read the core is waiting on ──
+  demand(block, seq, from = 0, len = null) {
+    if (this.stopped) return undefined;
     this.counters[C_DEMANDS] += 1;
-    this.demandReq = { seq, block, retries: 0 };
+    const size = blockLength(block, this.size, this.blockSize);
+    const start = Math.max(0, Math.min(Number(from) || 0, size - 1));
+    const end = len == null ? size : Math.max(start + 1, Math.min(size, start + Number(len)));
+    const d = { seq, block, from: start, end, follow: this.urgent?.block === block };
+    this.demandReq = d;
     const ready = this.findSlot(block, SLOT_READY);
-    if (ready >= 0) return this.answer(ready);
-    this.parked = true;
-    this.updateSequentialState();
+    if (ready >= 0) {
+      this.answer(ready, false);
+      this.ahead(block + 1, { first: true });   // one block ahead of the miss, before the stream resumes
+      return this.pump();
+    }
     // A miss outranks everything: every other request stops now, keeping what it got.
     for (const req of [...this.inflight.values()]) if (req.block !== block) this.abort(req);
-    const running = [...this.inflight.values()].find((req) => req.block === block);
-    if (running) {
-      running.kind = KIND_DEMAND;
-      Atomics.store(this.ctl, slotField(running.slot, S_KIND), KIND_DEMAND);
-      return;
+    if (!d.follow) this.urgent = { block, from: start, since: this.now(), retries: 0 };
+    this.urgent.from = start;
+    this.updateSequentialState();
+    let s = this.slotOf(block);
+    const req = s >= 0 ? this.inflight.get(s) : null;
+    if (req) {
+      req.kind = KIND_DEMAND;
+      Atomics.store(this.ctl, slotField(s, S_KIND), KIND_DEMAND);
     }
-    const partial = this.findSlot(block, SLOT_PARTIAL);
-    this.start(partial >= 0 ? partial : DEMAND_SLOT, block, KIND_DEMAND);
+    if (s >= 0 && this.covered(s, d)) {
+      this.answer(s, false);
+      if (!req) this.start(s, block, KIND_DEMAND);   // the rest of a parked block, at demand priority
+      return undefined;
+    }
+    if (req) {
+      if (!this.coming(req, d)) this.restart(req);
+      return undefined;                          // answered from that request's progress
+    }
+    if (s < 0) s = this.demandSlotFor();
+    if (s < 0) return this.failDemand({ code: E_NETWORK, detail: 0 });
+    this.start(s, block, KIND_DEMAND);
+    return undefined;
+  }
+
+  // Will the request in flight bring the window soon? Only if the window's first missing
+  // byte lies ahead of the request within its range, and not far ahead. (A window that
+  // runs on past the range into another gap gets the rest from the next request, which
+  // starts at the window's next missing byte.)
+  coming(req, d) {
+    const miss = firstMissing(this.filled[req.slot], d.from, d.end);
+    if (miss < 0) return true;
+    if (miss < req.pos || miss >= req.end) return false;
+    return miss - req.pos <= Math.max(this.restartMin, (this.counters[C_LINK_BPS] * this.rtt) / 1000);
+  }
+
+  // The request stops where it is (its bytes stay in the slot) and a new one starts at
+  // the window the read is waiting on; what it skipped comes after.
+  restart(req) {
+    this.counters[C_RESTARTS] += 1;
+    this.stopRequest(req);
+    return this.request(req.slot, req.block, KIND_DEMAND);
+  }
+
+  // A slot for a block a read needs: a free one (slot 0 first), else one holding part of
+  // another block, else -- only while the discio worker is blocked on this read, so it
+  // is reading no slot -- a finished block it hasn't taken yet (a sequential one first).
+  demandSlotFor() {
+    let best = -1;
+    let rank = Infinity;
+    for (let s = 0; s < this.layout.slots; s++) {
+      if (this.inflight.has(s) || this.pinned(s)) continue;
+      const state = this.slotGet(s, S_STATE);
+      let r = Infinity;
+      if (state === SLOT_FREE) r = s === DEMAND_SLOT ? 0 : 1;
+      else if (state === SLOT_PARTIAL) r = 2;
+      else if (state === SLOT_READY && this.demandReq) r = this.slotGet(s, S_KIND) === KIND_SEQUENTIAL ? 3 : 4;
+      if (r < rank) {
+        best = s;
+        rank = r;
+      }
+    }
+    if (best >= 0 && rank > 1) this.slotSet(best, SLOT_FREE, 0, 0, 0);
+    return best;
   }
 
   ahead(block, { first = false } = {}) {
@@ -406,32 +601,93 @@ export class DiscFetcher {
     this.pump();
   }
 
+  // A slot takes a block: kept if it already holds part of this one (those bytes are
+  // salvaged), else emptied.
   start(s, block, kind) {
-    const len = blockLength(block, this.size, this.blockSize);
     const resumable = this.slotGet(s, S_STATE) === SLOT_PARTIAL && this.slotGet(s, S_BLOCK) === block;
-    const got = resumable ? Math.min(this.slotGet(s, S_GOT), len) : 0;
+    if (!resumable) {
+      this.filled[s] = [];
+      this.tainted[s] = 0;
+    }
+    const got = rangeBytes(this.filled[s]);
     if (got > 0) this.counters[C_SALVAGED] += got;
     this.slotSet(s, SLOT_FILLING, block, got, kind);
-    const req = { slot: s, block, kind, got, len, aborted: false, ctrl: new AbortController() };
+    return this.request(s, block, kind);
+  }
+
+  // One HTTP request for the slot's next range: from the window of the read that wants
+  // this block, if one does, else the first gap.
+  request(s, block, kind) {
+    const len = blockLength(block, this.size, this.blockSize);
+    const ranges = this.filled[s];
+    const prefer = this.urgent?.block === block ? this.urgent.from : null;
+    const [start, end] = nextRange(ranges, len, prefer, this.windowAlign) ?? [len, len];
+    const req = {
+      slot: s, block, kind, start, end, pos: start, aborted: false, ended: false, ctrl: new AbortController(),
+      sentAt: this.now(), firstAt: null, alone: this.receiving === 0 && this.inflight.size === 0
+    };
     this.inflight.set(s, req);
-    if (got >= len) {
+    if (start >= end) {
       Promise.resolve().then(() => this.finish(req, null));
       return req;
     }
-    const data = this.slotData[s];
+    if (start > firstMissing(ranges, 0, len)) this.counters[C_WINDOW_FIRST] += 1;
     const base = block * this.blockSize;
-    this.fetchStream(this.url, base + got, base + len - 1, req.ctrl.signal, (chunk) => {
-      if (req.aborted) return;
-      const n = Math.min(chunk.length, len - req.got);
-      if (n > 0) data.set(n === chunk.length ? chunk : chunk.subarray(0, n), req.got);
-      req.got += n;
-      Atomics.store(this.ctl, slotField(s, S_GOT), req.got);
-      this.counters[C_BYTES] += chunk.length;
-    }).then(
+    this.fetchStream(this.url, base + start, base + end - 1, req.ctrl.signal, (chunk) => this.chunk(req, chunk)).then(
       (meta) => this.finish(req, meta),
       () => this.fail(req, { code: E_NETWORK, detail: 0 })
     );
     return req;
+  }
+
+  chunk(req, chunk) {
+    if (req.aborted) return;
+    this.measure(req, chunk.length);
+    const s = req.slot;
+    const n = Math.min(chunk.length, req.end - req.pos);
+    if (n > 0) {
+      this.slotData[s].set(n === chunk.length ? chunk : chunk.subarray(0, n), req.pos);
+      addRange(this.filled[s], req.pos, req.pos + n);
+      req.pos += n;
+      Atomics.store(this.ctl, slotField(s, S_GOT), rangeBytes(this.filled[s]));
+    }
+    this.counters[C_BYTES] += chunk.length;
+    // The read waiting on this block goes on as soon as its window is here.
+    const d = this.demandReq;
+    if (d && d.block === req.block && this.covered(s, d)) this.answer(s, true);
+  }
+
+  // The link: time to each response's first bytes (only for a request that had the link
+  // to itself), and bytes over the time spent receiving -- from one chunk to the next
+  // while any response is arriving, so idle time between requests doesn't count.
+  measure(req, bytes) {
+    const now = this.now();
+    if (req.firstAt == null) {
+      req.firstAt = now;
+      if (req.alone) {
+        const ms = now - req.sentAt;
+        this.rtt = this.rtt ? this.rtt + (ms - this.rtt) / 4 : ms;
+        this.rttMin = this.rttMin ? Math.min(this.rttMin, ms) : ms;
+        this.counters[C_RTT_MS] = this.rtt;
+        this.counters[C_RTT_MIN_MS] = this.rttMin;
+      }
+      if (this.receiving++ === 0) {
+        this.linkAt = now;                     // these bytes' time went to waiting for them
+        return;
+      }
+    }
+    const dt = now - this.linkAt;
+    this.linkAt = now;
+    const keep = Math.exp(-dt / LINK_TAU_MS);
+    this.linkBytes = this.linkBytes * keep + bytes;
+    this.linkMs = this.linkMs * keep + dt;
+    if (this.linkMs >= LINK_MIN_MS) this.counters[C_LINK_BPS] = (this.linkBytes / this.linkMs) * 1000;
+  }
+
+  endTransfer(req) {
+    if (req.firstAt == null || req.ended) return;
+    req.ended = true;
+    if (--this.receiving === 0) this.linkAt = null;
   }
 
   check(meta) {
@@ -443,54 +699,103 @@ export class DiscFetcher {
   }
 
   finish(req, meta) {
-    if (req.aborted || this.stopped) return;
+    if (req.aborted || this.stopped) return undefined;
     const problem = meta ? this.check(meta) : null;
     if (problem && problem.code !== E_CHANGED) return this.fail(req, problem);
-    if (req.got !== req.len) return this.fail(req, { code: E_SHORT, detail: req.got });
+    if (req.pos !== req.end) return this.fail(req, { code: E_SHORT, detail: req.pos - req.start });
+    this.endTransfer(req);
     this.inflight.delete(req.slot);
-    this.counters[C_REQUESTS] += 1;
+    if (req.end > req.start) this.counters[C_REQUESTS] += 1;
     this.failures = 0;
-    if (problem) this.sourceChanged();
-    // The server's current bytes still answer a miss; a background block of a changed
-    // disc is dropped.
-    if (req.kind === KIND_DEMAND && this.demandReq?.block === req.block) {
-      this.answer(req.slot);
-      // The discio worker is already copying the block out; the slot stays its until it
-      // frees it, and this thread writes from it before doing anything else.
-      if (!problem) this.writeToStore(req.block, req.slot);
-      return undefined;
-    }
+    const s = req.slot;
     if (problem) {
-      this.slotSet(req.slot, SLOT_FREE, 0, 0, 0);
+      this.sourceChanged();
+      this.tainted[s] = 1;
+    }
+    if (firstMissing(this.filled[s], 0, blockLength(req.block, this.size, this.blockSize)) < 0) {
+      return this.complete(s, req.block, req.kind);
+    }
+    // The server's current bytes still answer a read; a background block of a changed
+    // disc is dropped.
+    if (this.tainted[s] && req.kind !== KIND_DEMAND) return this.drop(s);
+    this.request(s, req.block, req.kind);      // the rest: after the window, then the start
+    return undefined;
+  }
+
+  // A whole block. One a read waited on goes to the discio worker (L1, and L2 where it
+  // writes the copy) and, from here, to the copy; then the block after it, then the
+  // stream. A background block goes to the copy, or to the discio worker to write.
+  complete(s, block, kind) {
+    const len = blockLength(block, this.size, this.blockSize);
+    const tainted = this.tainted[s] === 1;
+    const u = this.urgent?.block === block ? this.urgent : null;
+    if (u) {
+      const ms = this.now() - u.since;
+      this.counters[C_BLOCKS] += 1;
+      this.counters[C_BLOCK_MS] += ms;
+      this.counters[C_BLOCK_LAST_MS] = ms;
+      this.urgent = null;
+    }
+    this.tainted[s] = 0;
+    if (u || kind === KIND_DEMAND) {
+      this.slotSet(s, SLOT_READY, block, len, KIND_DEMAND);
+      if (this.demandReq?.block === block) this.answer(s, true);
+      else this.notifyReady();
+      // The discio worker may be copying it out already; this thread writes from it
+      // before doing anything else.
+      if (!tainted) this.writeToStore(block, s);
+      if (u) this.ahead(block + 1, { first: true });
       return this.pump();
     }
+    if (tainted) return this.drop(s);
     if (this.store) {
-      this.writeToStore(req.block, req.slot);
-      this.slotSet(req.slot, SLOT_FREE, 0, 0, 0);
+      this.writeToStore(block, s);
+      this.slotSet(s, SLOT_FREE, 0, 0, 0);
       return this.pump();
     }
-    this.slotSet(req.slot, SLOT_READY, req.block, req.got, req.kind);
+    this.slotSet(s, SLOT_READY, block, len, kind);
     this.notifyReady();
     return this.pump();
   }
 
+  drop(s) {
+    this.filled[s] = [];
+    this.tainted[s] = 0;
+    this.slotSet(s, SLOT_FREE, 0, 0, 0);
+    return this.pump();
+  }
+
+  // A request that ended early: its slot keeps what came (resumable) or is freed.
+  park(req) {
+    const s = req.slot;
+    const got = rangeBytes(this.filled[s]);
+    if (got === 0) {
+      this.filled[s] = [];
+      this.tainted[s] = 0;
+    }
+    this.slotSet(s, got > 0 ? SLOT_PARTIAL : SLOT_FREE, req.block, got, req.kind);
+  }
+
   fail(req, problem) {
-    if (req.aborted || this.stopped) return;
+    if (req.aborted || this.stopped) return undefined;
+    this.endTransfer(req);
     this.inflight.delete(req.slot);
-    this.slotSet(req.slot, req.got > 0 ? SLOT_PARTIAL : SLOT_FREE, req.block, req.got, req.kind);
-    if (req.kind === KIND_DEMAND) {
-      const d = this.demandReq;
-      if (!d || d.block !== req.block) return this.pump();
-      if (d.retries < this.demandRetries && retryable(problem)) {
-        d.retries += 1;
+    this.park(req);
+    const u = this.urgent?.block === req.block ? this.urgent : null;
+    if (u) {
+      if (u.retries < this.demandRetries && retryable(problem)) {
+        u.retries += 1;
         this.setTimer(() => {
-          if (this.demandReq !== d || this.stopped) return;
-          const partial = this.findSlot(d.block, SLOT_PARTIAL);
-          this.start(partial >= 0 ? partial : DEMAND_SLOT, d.block, KIND_DEMAND);
-        }, this.retryBaseMs * d.retries);
-        return;
+          if (this.urgent !== u || this.stopped) return;
+          let s = this.slotOf(u.block);
+          if (s < 0) s = this.demandSlotFor();
+          if (s >= 0 && !this.inflight.has(s)) this.start(s, u.block, KIND_DEMAND);
+        }, this.retryBaseMs * u.retries);
+        return undefined;
       }
-      return this.failDemand(problem);
+      this.urgent = null;
+      if (this.demandReq?.block === req.block) return this.failDemand(problem);
+      return this.pump();
     }
     if (req.kind === KIND_SEQUENTIAL) {
       this.failures += 1;
@@ -499,32 +804,28 @@ export class DiscFetcher {
     return this.pump();
   }
 
-  answer(s) {
-    const block = this.slotGet(s, S_BLOCK);
-    const d = this.demandReq?.block === block ? this.demandReq : null;
-    if (this.slotGet(s, S_STATE) !== SLOT_READY) {
-      this.slotSet(s, SLOT_READY, block, blockLength(block, this.size, this.blockSize), KIND_DEMAND);
-    }
+  // Tell the discio worker its read can go on: slot s holds the window, or the whole
+  // block (READY) for it to take.
+  answer(s, waited) {
+    const d = this.demandReq;
+    if (!d) return false;
     this.demandReq = null;
-    this.parked = false;
-    if (d) {
-      Atomics.store(this.ctl, H_DEMAND_SLOT, s);
-      const waiting = demandWord(d.seq, DEMAND_WAITING);
-      const taken = Atomics.compareExchange(this.ctl, H_DEMAND, waiting, demandWord(d.seq, DEMAND_DONE)) === waiting;
-      Atomics.notify(this.ctl, H_DEMAND);
-      // Nobody waits for it any more (the discio worker gave up on this demand): slot 0
-      // is simply freed, a background slot is offered like any finished block.
-      if (!taken && s === DEMAND_SLOT) this.slotSet(s, SLOT_FREE, 0, 0, 0);
-      else if (!taken) this.notifyReady();
-    }
-    this.ahead(block + 1, { first: true });   // one block ahead of the miss, before the stream resumes
-    return this.pump();
+    const whole = this.slotGet(s, S_STATE) === SLOT_READY;
+    Atomics.store(this.ctl, H_DEMAND_SLOT, s);
+    Atomics.store(this.ctl, H_DEMAND_INFO, (whole ? 0 : INFO_WINDOW) | (waited ? INFO_WAITED : 0) | (d.follow ? INFO_FOLLOW : 0));
+    const waiting = demandWord(d.seq, DEMAND_WAITING);
+    const taken = Atomics.compareExchange(this.ctl, H_DEMAND, waiting, demandWord(d.seq, DEMAND_DONE)) === waiting;
+    Atomics.notify(this.ctl, H_DEMAND);
+    // Nobody waits for it any more (the discio worker gave up on this demand): a whole
+    // block is offered like any finished one.
+    if (!taken && whole) this.notifyReady();
+    return taken;
   }
 
   failDemand(problem) {
     const d = this.demandReq;
     this.demandReq = null;
-    this.parked = false;
+    this.urgent = null;
     if (d) {
       Atomics.store(this.ctl, H_DEMAND_ERROR, problem.code);
       Atomics.store(this.ctl, H_DEMAND_DETAIL, problem.detail | 0);
@@ -541,22 +842,30 @@ export class DiscFetcher {
     for (const req of [...this.inflight.values()]) if (req.kind === KIND_SEQUENTIAL) this.abort(req);
   }
 
-  abort(req) {
+  stopRequest(req) {
     req.aborted = true;
     try { req.ctrl.abort(); } catch { /* already settled */ }
+    this.endTransfer(req);
     this.inflight.delete(req.slot);
-    this.counters[C_ABORTS] += 1;
-    this.slotSet(req.slot, req.got > 0 ? SLOT_PARTIAL : SLOT_FREE, req.block, req.got, req.kind);
   }
 
-  // A slot for a background request: the one already holding part of this block, else a
-  // free one, else one holding part of another block (that progress is let go).
+  abort(req) {
+    this.stopRequest(req);
+    this.counters[C_ABORTS] += 1;
+    this.park(req);
+  }
+
+  // A slot for a background request: the one already holding part of this block (any,
+  // the demand slot included), else a free one, else one holding part of another block
+  // (that progress is let go). Never the one the discio worker is copying from.
   asyncSlotFor(block) {
     let free = -1;
     let partial = -1;
-    for (let s = DEMAND_SLOT + 1; s < this.layout.slots; s++) {
+    for (let s = 0; s < this.layout.slots; s++) {
+      if (this.pinned(s)) continue;
       const state = this.slotGet(s, S_STATE);
       if (state === SLOT_PARTIAL && this.slotGet(s, S_BLOCK) === block) return s;
+      if (s === DEMAND_SLOT) continue;
       if (state === SLOT_FREE && free < 0) free = s;
       if (state === SLOT_PARTIAL && partial < 0) partial = s;
     }
@@ -668,6 +977,7 @@ export class DiscFetcher {
   }
 }
 
+
 /**
  * This device's copy, opened by the fetch worker to write: under a Web Lock per disc
  * (shared handles would otherwise let a second tab write the same files), with the image
@@ -770,19 +1080,32 @@ export class FetchWorkerClient {
     return bytes;
   }
 
-  demand(block) {
-    for (let s = DEMAND_SLOT + 1; s < this.layout.slots; s++) {
+  // Copy a window out of a slot the fetcher is still filling: it answered because those
+  // bytes are there, and it writes nothing over them while the demand word says so.
+  takeWindow(s, block, from, len) {
+    if (Atomics.load(this.ctl, slotField(s, S_BLOCK)) !== block) {
+      throw new Error(`disc block ${block}: the fetch worker answered with block ${Atomics.load(this.ctl, slotField(s, S_BLOCK))}`);
+    }
+    const end = len == null ? blockLength(block, this.layout.size, this.layout.blockSize) : from + len;
+    return this.slotData[s].slice(from, end);
+  }
+
+  // -> { bytes, from, waited, filling, follow }: `bytes` are the block's from `from` --
+  // the whole block (from 0) when it had arrived, else just the window asked for, which
+  // is all a block still arriving can give. `waited`: the read waited on the network.
+  demand(block, from = 0, len = null) {
+    for (let s = 0; s < this.layout.slots; s++) {
       if (Atomics.load(this.ctl, slotField(s, S_STATE)) === SLOT_READY &&
           Atomics.load(this.ctl, slotField(s, S_BLOCK)) === block) {
         const bytes = this.takeSlot(s, block);
         this.freed();
-        return { bytes, waited: false };
+        return { bytes, from: 0, waited: false };
       }
     }
     this.seq = (this.seq + 1) & 0x1fffffff;
     const waiting = demandWord(this.seq, DEMAND_WAITING);
     Atomics.store(this.ctl, H_DEMAND, waiting);
-    this.port.postMessage({ type: "demand", block, seq: this.seq });
+    this.port.postMessage({ type: "demand", block, from, len, seq: this.seq });
     const deadline = this.now() + this.demandTimeoutMs;
     let word = Atomics.load(this.ctl, H_DEMAND);
     while (word === waiting) {
@@ -793,10 +1116,21 @@ export class FetchWorkerClient {
     }
     if (word === demandWord(this.seq, DEMAND_DONE)) {
       const s = Atomics.load(this.ctl, H_DEMAND_SLOT);
-      const bytes = this.takeSlot(s, block);
-      Atomics.store(this.ctl, H_DEMAND, demandWord(this.seq, DEMAND_IDLE));
-      if (s !== DEMAND_SLOT) this.freed();
-      return { bytes, waited: true };
+      const info = Atomics.load(this.ctl, H_DEMAND_INFO);
+      const waited = (info & INFO_WAITED) !== 0;
+      const follow = (info & INFO_FOLLOW) !== 0;
+      // Whole by now (it may have finished since the answer): taken, as a finished block is.
+      if (Atomics.load(this.ctl, slotField(s, S_STATE)) === SLOT_READY) {
+        const bytes = this.takeSlot(s, block);
+        Atomics.store(this.ctl, H_DEMAND, demandWord(this.seq, DEMAND_IDLE));
+        this.freed();
+        return { bytes, from: 0, waited, follow };
+      }
+      try {
+        return { bytes: this.takeWindow(s, block, from, len), from, waited, filling: true, follow };
+      } finally {
+        Atomics.store(this.ctl, H_DEMAND, demandWord(this.seq, DEMAND_IDLE));
+      }
     }
     Atomics.store(this.ctl, H_DEMAND, demandWord(this.seq, DEMAND_IDLE));
     if (word === demandWord(this.seq, DEMAND_FAILED)) {
@@ -809,9 +1143,10 @@ export class FetchWorkerClient {
     this.port.postMessage({ type: "ahead", block });
   }
 
+  // Finished blocks the fetcher offers, a block a read waited on (in any slot) included.
   drainReady(take) {
     let any = false;
-    for (let s = DEMAND_SLOT + 1; s < this.layout.slots; s++) {
+    for (let s = 0; s < this.layout.slots; s++) {
       if (Atomics.load(this.ctl, slotField(s, S_STATE)) !== SLOT_READY) continue;
       const block = Atomics.load(this.ctl, slotField(s, S_BLOCK));
       const kind = Atomics.load(this.ctl, slotField(s, S_KIND));
@@ -868,7 +1203,18 @@ export class FetchWorkerClient {
 
   counters() {
     const c = this.countersView;
-    return { bytes: c[C_BYTES], requests: c[C_REQUESTS], salvaged: c[C_SALVAGED], aborts: c[C_ABORTS], demands: c[C_DEMANDS] };
+    return {
+      bytes: c[C_BYTES], requests: c[C_REQUESTS], salvaged: c[C_SALVAGED], aborts: c[C_ABORTS], demands: c[C_DEMANDS],
+      restarts: c[C_RESTARTS], windowFirst: c[C_WINDOW_FIRST],
+      blocks: c[C_BLOCKS], blockMs: c[C_BLOCK_MS], lastBlockMs: c[C_BLOCK_LAST_MS]
+    };
+  }
+
+  // The fetcher's estimate of the link: bytes per second while receiving, time to first
+  // bytes (smoothed, and the shortest); zeros until it has seen enough.
+  link() {
+    const c = this.countersView;
+    return { bytesPerSecond: c[C_LINK_BPS], rttMs: c[C_RTT_MS], rttMinMs: c[C_RTT_MIN_MS] };
   }
 
   sequentialState() {
@@ -903,7 +1249,8 @@ export class InlineFetcher {
     this.changed = false;
     this.ready = new Map();
     this.inflight = new Map();
-    this.stats = { bytes: 0, requests: 0, salvaged: 0, aborts: 0, demands: 0 };
+    this.stats = { bytes: 0, requests: 0, salvaged: 0, aborts: 0, demands: 0, restarts: 0, windowFirst: 0, blocks: 0, blockMs: 0, lastBlockMs: 0 };
+    this.now = () => performance.now();
   }
 
   range(block) {
@@ -918,6 +1265,7 @@ export class InlineFetcher {
       return { bytes: done, waited: false };
     }
     const [a, b] = this.range(block);
+    const t0 = this.now();
     const x = this.createXhr();
     x.open("GET", this.url, false);
     x.responseType = "arraybuffer";
@@ -929,7 +1277,11 @@ export class InlineFetcher {
     if (bytes.length !== b - a + 1) throw new Error(`short disc read (${bytes.length} of ${b - a + 1})`);
     this.stats.requests++;
     this.stats.bytes += bytes.length;
-    return { bytes, waited: true };
+    const ms = this.now() - t0;                 // here the window and the whole block arrive together
+    this.stats.blocks++;
+    this.stats.blockMs += ms;
+    this.stats.lastBlockMs = ms;
+    return { bytes, from: 0, waited: true };
   }
 
   ahead(block) {
