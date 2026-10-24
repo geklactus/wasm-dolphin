@@ -6,10 +6,11 @@
 // File and serves every slice from three tiers:
 //
 //   L1  the last RANGE_CACHE_BLOCKS blocks in memory (4 MiB blocks, 256 MiB);
-//   L2  the whole image in the origin-private file system, one file per disc, read and
-//       written through a FileSystemSyncAccessHandle (the discio worker is a dedicated
-//       worker, where sync handles exist), with a bitmap of the blocks it holds kept
-//       beside it -- the bitmap says what is there, never the file's size;
+//   L2  the whole image in the origin-private file system, one file per disc, read
+//       through a FileSystemSyncAccessHandle (the discio worker is a dedicated worker,
+//       where sync handles exist) and, in Chromium, written by the fetch worker through
+//       a second, shared one, with a bitmap of the blocks it holds kept beside it -- the
+//       bitmap says what is there, never the file's size;
 //   L3  HTTP Range requests, made by a fetch worker (remote-disc-fetch.js).
 //
 // A read checks L1, then L2, then waits on L3, and every block that arrives from L3 is

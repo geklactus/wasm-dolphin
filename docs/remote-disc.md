@@ -21,12 +21,25 @@ the dropped `File` and serves each slice from:
 | | where | what |
 |---|---|---|
 | L1 | memory | the last 64 blocks (4 MiB each, 256 MiB), as before |
-| L2 | this device | the whole image in the origin-private file system, one file per disc, read and written through a `FileSystemSyncAccessHandle` |
+| L2 | this device | the whole image in the origin-private file system, one file per disc, read through a `FileSystemSyncAccessHandle` |
 | L3 | the network | HTTP Range requests, all made by a fetch worker |
 
 A read checks L1, then L2, then waits on L3. Every block that arrives from L3 is
-written to L2 (and, as before, kept in L1). L2 reads take exactly the bytes asked
-for, not whole blocks.
+written to L2 (and a miss's block, as before, kept in L1). L2 reads take exactly
+the bytes asked for, not whole blocks.
+
+**Who writes the copy.** In Chromium (shared sync handles, `mode:
+"readwrite-unsafe"`, since 121) the fetch worker writes every block, flushes, and
+keeps the bitmap and metadata files; the discio worker holds a second, shared
+handle on the image and only reads. A Web Lock per disc keeps a second tab off the
+copy (shared handles alone would let it in). Writing a 4 MiB block into the sparse
+image cost 24 ms in this project's Linux container (block allocation), and a flush
+after 5 s of writes 55 ms — time the discio worker, which also serves the core's
+other syscalls and presents frames, should not spend: with the writes in the
+discio worker, its 10 ms timer ran more than 8 ms late on 262 of 18,913 ticks
+during a first launch; with them in the fetch worker, on 2 of 10,745. Where shared
+handles don't exist, the discio worker opens the copy with an exclusive handle and
+writes it itself (blocks handed over from the fetch worker's slots).
 
 On disk, a disc is three files under `dolphin-discs/` in OPFS, named by a hash
 of its URL:
@@ -70,9 +83,10 @@ the L2 bitmap (written only by the discio worker), and the slots' data (one bloc
 each: the miss's own, two in flight, two finished and not yet taken).
 
 While the game runs, the stream is held to 32 MiB/s (about 270 Mbit/s), so a fast
-LAN does not turn the discio worker into a disc writer — each block costs it one
-sync write. Before the boot ("Download fully before starting") it is unlimited.
-Misses and the block ahead are never held back.
+LAN does not turn the download into a disc- and CPU-bound job beside the game (and,
+in the fallback, the discio worker into a disc writer). Before the boot ("Download
+fully before starting") it is unlimited. Misses and the block ahead are never held
+back.
 
 Without `SharedArrayBuffer` or nested workers, the reader falls back to the old
 behaviour (synchronous XHR per miss, one block ahead) with no sequential stream.
@@ -91,8 +105,8 @@ behaviour (synchronous XHR per miss, one block ahead) with no sequential stream.
   started; if the image won't fit, the disc streams and the panel says why. A
   backend that refuses the size (Chromium's in-memory one in incognito silently
   leaves the file empty) is caught the same way.
-- **Another tab** with the same disc open holds the files (sync handles are
-  exclusive); the second tab streams and says so.
+- **Another tab** with the same disc open holds its Web Lock (or, in the fallback,
+  the exclusive handle); the second tab streams and says so.
 - `navigator.storage.persist()` is asked once, on the first Start.
 
 ## The page
