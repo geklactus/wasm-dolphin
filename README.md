@@ -150,6 +150,18 @@ Every setting is also a URL parameter, so any configuration is a shareable
 link. See [rendering modes](docs/rendering-modes.md) and
 [JIT flags](docs/jit-flags.md) for the full flag surface.
 
+### A disc on a server (`?disc=`)
+
+`?disc=<same-origin URL>` plays an image that stays on the server (it must
+answer Range requests; `npm start` does). The worker reads it a block at a time
+from memory, then from a copy on this device (the origin-private file system),
+then from the network, and pulls the whole image onto this device while the game
+runs, so a second launch reads nothing from the network. The **Game** block
+shows how much is on this device, offers **Download fully before starting** and
+**Remove from this device**; **Settings** lists the discs kept here.
+`?prefetch=0` turns off the background download, `?opfs=0` the copy on this
+device. See [docs/remote-disc.md](docs/remote-disc.md).
+
 ---
 
 ## Status at a glance
@@ -480,6 +492,8 @@ src/                     Browser host (main thread + worker)
   core-host.js           Flag parsing, core lifecycle, presentation pacing
   game-profiles.js       Per-game renderer defaults + disc-id probing
   upstream-discio-worker.js  Worker that owns the core + ISO mount + present
+  remote-disc.js         ?disc=: the tiered reader (memory, OPFS copy, network)
+  remote-disc-fetch.js   ?disc=: the fetch worker's scheduler and shared protocol
   settings.js input.js audio.js …
 core/
   upstream/              C-ABI shim compiled with Dolphin (dolphin_web_core.cpp)
@@ -488,7 +502,8 @@ cores/dolphin/           Committed prebuilt core (.js/.wasm) the host loads
 vendor/dolphin/          Upstream Dolphin sources (gitignored; fetched+patched)
 patches/dolphin-wasm/    Build gates + browser-platform patches + session notes
 tools/
-  serve.mjs              Dev server (COOP/COEP, --open)
+  serve.mjs              Dev server (COOP/COEP, Range for ?disc=, --open)
+  remote-disc-bench.mjs  ?disc= reader benchmark (throttled link, before/after)
   build-upstream-target.mjs   Emscripten build driver
   perf-regression-gate.mjs    Direct-save headed-Chrome qualification harness
   naga-spirv-wgsl/       Rust SPIR-V→WGSL transpiler (WebGPU path)

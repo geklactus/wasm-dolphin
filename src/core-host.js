@@ -616,6 +616,23 @@ export class EmulatorHost {
     return this.game;
   }
 
+  // ?disc=: open the disc in the worker before the boot, for "download fully before
+  // starting". That loads the core, so the backend and game profile must be settled
+  // first; mountFile then reuses the opened disc. Null without a worker adapter.
+  async prepareRemoteDisc(disc) {
+    if (!(await this.adapterAvailable())) return null;
+    if (typeof this.adapter?.request !== "function" || typeof this.adapter.load !== "function") return null;
+    await this.adapter.load();
+    return this.adapter.request("discPrepare", { file: disc });
+  }
+
+  // A remote-disc request (discStats, discRemove, discFlush) to a loaded worker; null
+  // before the worker exists.
+  discRequest(type, payload = {}) {
+    if (!this.adapter?.loaded || typeof this.adapter.request !== "function") return Promise.resolve(null);
+    return this.adapter.request(type, payload);
+  }
+
   async adapterAvailable() {
     if (this.coreKind !== "upstream") return dolphinBundleAvailable();
     if (await upstreamBundleAvailable(this.upstreamCoreBuild.coreUrl)) return true;

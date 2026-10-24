@@ -134,6 +134,8 @@ import {
   createWgpuUploadProbeExecutor
 } from "./wgpu-upload-probe-executor.js";
 import { AudioPcmProducer } from "./audio-pcm-producer.js";
+import { openRangeDisc } from "./remote-disc.js";
+import { createDiscFetcher } from "./remote-disc-fetch.js";
 import { installWgpuDiagnosticLogFilter } from "./diagnostic-log-filter.js";
 import {
   WGPU_VISUAL_BYTES_PER_ROW,
@@ -160,6 +162,7 @@ let api = null;
 let wgpuDiagnosticQuiet = false;
 let wgpuDiagnosticLogFilter = installWgpuDiagnosticLogFilter({ enabled: false });
 let mounted = false;
+let remoteDisc = null;
 let inputMask = 0;
 let workerOwnsCanvas = false;
 let renderCanvas = null;
@@ -1048,6 +1051,19 @@ async function handleMessage(type, payload) {
       return framePayload();
     case "bootProbe":
       return { bootProbe: bootProbePayload(metadataPayload()) };
+    // ?disc=: the remote disc's tiers (src/remote-disc.js). discPrepare opens the disc
+    // before the boot, for "download fully before starting"; mountFile reuses it.
+    case "discPrepare":
+      if (!payload.file?.url) throw new Error("discPrepare needs a disc posted with ?disc=");
+      return { disc: (await openRemoteDisc(payload.file, { gameRunning: false })).stats };
+    case "discStats":
+      return { disc: remoteDisc?.stats ?? null };
+    case "discRemove":
+      await remoteDisc?.removeFromDevice();
+      return { disc: remoteDisc?.stats ?? null };
+    case "discFlush":
+      remoteDisc?.flush();
+      return { disc: remoteDisc?.stats ?? null };
     case "saveState":
       return { saved: Boolean(api?.saveState(payload.slot | 0)) };
     case "loadState": {
@@ -2226,6 +2242,55 @@ function resolveWorkerFs(moduleInstance) {
   return moduleInstance?.FS?.filesystems?.WORKERFS ?? moduleInstance?.WORKERFS ?? null;
 }
 
+// ?disc=<same-origin URL>: the page posts {url, name, size, etag, lastModified, prefetch,
+// opfs} in place of a File, and a RangeDisc (src/remote-disc.js) stands in for it under
+// WORKERFS -- memory, then this device's copy in OPFS, then HTTP Range through a fetch
+// worker that also pulls the whole image onto this device while the game runs. One
+// disc at a time; the same URL again is the same disc (so a prepared one is reused).
+async function openRemoteDisc(source, { gameRunning }) {
+  if (remoteDisc && !remoteDisc.closed && remoteDisc.url === source.url) {
+    remoteDisc.setGameRunning(gameRunning || remoteDisc.gameRunning);
+    return remoteDisc;
+  }
+  const previous = remoteDisc;
+  remoteDisc = null;
+  await previous?.close();
+  const log = (message) => console.log(`[disc] ${message}`);
+  const storage = self.navigator?.storage;
+  remoteDisc = await openRangeDisc(source, {
+    opfs: source.opfs !== false,
+    prefetch: source.prefetch !== false,
+    getRoot: storage?.getDirectory ? () => storage.getDirectory() : null,
+    estimate: storage?.estimate ? () => storage.estimate() : null,
+    createFetcher: (disc, options) => createDiscFetcher(disc, { ...options, log }),
+    readError: remoteDiscReadError,
+    log
+  });
+  remoteDisc.setGameRunning(gameRunning);
+  return remoteDisc;
+}
+
+// WORKERFS hands slice(a, b) to a FileReaderSync. A RangeDisc's slice already holds the
+// bytes, so the reader passes them through as they are; a real File still goes through
+// the FileReaderSync.
+function installRangeAwareReader(workerFs) {
+  if (workerFs.reader?.rangeAware) return;
+  const real = workerFs.reader ?? new FileReaderSync();
+  workerFs.reader = {
+    rangeAware: true,
+    readAsArrayBuffer: (chunk) => (chunk instanceof Blob ? real.readAsArrayBuffer(chunk) : chunk.buffer)
+  };
+}
+
+// A remote read that still fails after the fetch worker's retries reaches Dolphin as EIO
+// (FS.ErrnoError, which the proxied syscall returns as an errno) rather than as a JS
+// exception thrown through the syscall.
+function remoteDiscReadError(error) {
+  postStatus(`disc read failed: ${error?.message || error}`);
+  const ErrnoError = moduleInstance?.FS?.ErrnoError;
+  return ErrnoError ? new ErrnoError(29) : error;
+}
+
 function bindApi(module) {
   const cwrap = module.cwrap.bind(module);
   const ccall = module.ccall.bind(module);
@@ -2540,8 +2605,18 @@ async function mountFile(file, gameProfile = activeGameProfile) {
     mounted = false;
   }
 
+  const workerFs = resolveWorkerFs(moduleInstance);
+  let data = file;
+  if (file.url) {
+    data = await openRemoteDisc(file, { gameRunning: true });
+    installRangeAwareReader(workerFs);
+  } else if (remoteDisc) {
+    await remoteDisc.close();
+    remoteDisc = null;
+  }
+
   const _t_workerfs = performance.now();
-  fs.mount(resolveWorkerFs(moduleInstance), { blobs: [{ name: safeName, data: file }] }, WORKERFS_MOUNT_DIR);
+  fs.mount(workerFs, { blobs: [{ name: safeName, data }] }, WORKERFS_MOUNT_DIR);
   mounted = true;
   console.log(`[boot-phase] fs.mount(WORKERFS) took ${(performance.now() - _t_workerfs).toFixed(1)}ms (${(file.size / 1048576).toFixed(1)}MiB image)`);
 

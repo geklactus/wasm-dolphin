@@ -138,6 +138,17 @@
                             </div>
                             <p class="game-title" id="gameTitle">Demo scene</p>
                             <p class="muted" id="mountNote">Demo WASM core active</p>
+                            <div class="disc-cache" id="discCache" hidden>
+                            <p class="muted" id="discCacheNote">On this device: -</p>
+                            <p class="muted compact" id="discNetNote"></p>
+                            <div class="disc-cache-actions">
+                              <label class="switch-line tip" data-tip="Keep the boot waiting until the whole disc is on this device, so the game never waits on the network">
+                              <input id="discDownloadFirst" type="checkbox">
+                              <span>Download fully before starting</span>
+                              </label>
+                              <button id="discRemoveButton" type="button" disabled>Remove from this device</button>
+                            </div>
+                            </div>
                             </section>
                             
                             <form class="settings-panel" id="settingsForm">
@@ -280,6 +291,14 @@
                               <input id="settingAutoProfile" type="checkbox" checked>
                               <span>Auto per-game</span>
                             </label>
+                            </div>
+                            
+                            <div class="disc-library" id="discLibrary" hidden>
+                            <div class="section-heading">
+                              <h3>Discs on this device</h3>
+                              <span id="discLibraryTotal"></span>
+                            </div>
+                            <ul class="disc-library-list" id="discLibraryList"></ul>
                             </div>
                             
                             <div class="settings-actions">

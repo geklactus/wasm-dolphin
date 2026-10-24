@@ -31,6 +31,15 @@ import {
   requestedWgpuRendererWorkerProbe,
   shouldShowIntentionalBlankWgpuNotice
 } from "./wgpu-replay-diagnostics.js";
+import {
+  discCacheKey,
+  formatDiscBytes,
+  listCachedDiscs,
+  readCachedDiscEntry,
+  readCachedRange,
+  readRemoteDiscFlags,
+  removeCachedDisc
+} from "./remote-disc.js";
 
 const elements = {
   panelToggle: document.querySelector("#panelToggle"),
@@ -55,6 +64,14 @@ const elements = {
   coreMode: document.querySelector("#coreMode"),
   debugPanel: document.querySelector("#debugPanel"),
   debugToggle: document.querySelector("#debugToggle"),
+  discCache: document.querySelector("#discCache"),
+  discCacheNote: document.querySelector("#discCacheNote"),
+  discDownloadFirst: document.querySelector("#discDownloadFirst"),
+  discLibrary: document.querySelector("#discLibrary"),
+  discLibraryList: document.querySelector("#discLibraryList"),
+  discLibraryTotal: document.querySelector("#discLibraryTotal"),
+  discNetNote: document.querySelector("#discNetNote"),
+  discRemoveButton: document.querySelector("#discRemoveButton"),
   dropBadge: document.querySelector("#dropBadge"),
   dropZone: document.querySelector("#dropZone"),
   frameCounter: document.querySelector("#frameCounter"),
@@ -133,6 +150,47 @@ const elements = {
 
 const DEBUG_PREF_KEY = "wasm-dolphin.debug-open";
 const OSD_PREF_KEY = "wasm-dolphin.osd-visible";
+
+// ?disc= state (wireRemoteDisc() runs from the wire* calls below, before the rest of
+// this module has been evaluated, so what it touches is declared up here).
+const DISC_PERSIST_ASKED_KEY = "wasm-dolphin.disc-persist-asked";
+const DISC_DOWNLOAD_FIRST_KEY = "wasm-dolphin.disc-download-first";
+const remoteDiscState = { disc: null, key: null, stats: null, poll: null, libraryAt: 0, complete: false };
+
+class RemoteDisc {
+  constructor(source) {
+    Object.assign(this, source);
+    this.type = "application/octet-stream";
+  }
+
+  // The header read before any worker exists: from this device's copy when it holds
+  // those bytes (a second launch reads nothing from the network), else a Range request.
+  slice(start = 0, end = this.size) {
+    const source = { url: this.url, name: this.name, size: this.size, etag: this.etag, lastModified: this.lastModified };
+    const stop = Math.min(end, this.size);
+    const local = this.opfs;
+    return {
+      arrayBuffer: async () => {
+        const cached = local ? await opfsRoot().then((root) => readCachedRange(root, source, start, stop)).catch(() => null) : null;
+        if (cached) return cached.buffer;
+        const response = await fetch(source.url, {
+          headers: { Range: `bytes=${start}-${stop - 1}` },
+          credentials: "same-origin",
+          cache: "no-store"
+        });
+        if (response.status !== 206) throw new Error(`the disc answered HTTP ${response.status} to a Range request`);
+        return response.arrayBuffer();
+      }
+    };
+  }
+}
+
+let opfsRootPromise = null;
+function opfsRoot() {
+  if (!navigator.storage?.getDirectory) return Promise.resolve(null);
+  opfsRootPromise ??= navigator.storage.getDirectory().catch(() => null);
+  return opfsRootPromise;
+}
 
 const keyboardPressed = new Set();
 let touchPressed = new Set();
@@ -266,6 +324,7 @@ wireKeyboard();
 wireWiimotePointer();
 wireTouchControls();
 wireGamepadPolling();
+wireRemoteDisc();
 
 // §28cx main-thread profiler — activates only with ?mainprof=1. Diagnoses
 // what eats main-thread time (LoAF script attribution) and whether the audio
@@ -897,9 +956,9 @@ async function applyGameProfile(file) {
   if (notes.length) setStatus(`${gameId}: ${notes.join("; ")} (${profile.why})`);
 }
 
-async function mountFile(file) {
+async function mountFile(file, { profileApplied = false } = {}) {
   try {
-    await applyGameProfile(file);
+    if (!profileApplied) await applyGameProfile(file);
     const game = await host.mountFile(file);
     // Auto-unmute on disc boot. AudioController defaults to muted because
     // the AudioContext can only be created after a user gesture; the disc
@@ -1295,6 +1354,282 @@ function formatImageSizes(rawSize, dataSize) {
   const raw = formatBytesMaybe(rawSize);
   const data = formatBytesMaybe(dataSize);
   return raw && data ? `${raw} / ${data}` : raw || data || "-";
+}
+
+// ?disc=<same-origin URL>: a disc on the server. The page's own way in is a dropped
+// File; with ?disc= the image stays on the server and the worker reads it through
+// src/remote-disc.js -- memory, then this device's copy (OPFS), then HTTP Range -- while
+// a fetch worker pulls the whole image onto this device. The page needs only the size
+// and validators (a HEAD) and the header for the game id. A click is still needed (the
+// AudioContext wants a gesture), so the drop zone becomes a start button. Settings
+// that reload the page keep the parameter; ?prefetch=0 and ?opfs=0 travel with the disc.
+function wireRemoteDisc() {
+  wireDiscLibrary();
+  const param = new URLSearchParams(window.location.search).get("disc");
+  if (!param) return;
+  let url;
+  try {
+    url = new URL(param, window.location.href);
+  } catch {
+    setStatus("?disc= is not a URL", "error");
+    return;
+  }
+  if (url.origin !== window.location.origin) {
+    setStatus("?disc= must be on this site", "error");
+    return;
+  }
+  const name = decodeURIComponent(url.pathname.split("/").pop() || "disc");
+  const flags = readRemoteDiscFlags(window.location.search);
+  elements.discCache.hidden = false;
+  elements.dropBadge.textContent = `Loading ${name}…`;
+  elements.gameTitle.textContent = name;
+  try { elements.discDownloadFirst.checked = localStorage.getItem(DISC_DOWNLOAD_FIRST_KEY) === "1"; } catch {}
+  elements.discDownloadFirst.disabled = !flags.opfs;
+  elements.discDownloadFirst.addEventListener("change", () => {
+    try { localStorage.setItem(DISC_DOWNLOAD_FIRST_KEY, elements.discDownloadFirst.checked ? "1" : "0"); } catch {}
+  });
+  elements.discRemoveButton.addEventListener("click", () => removeDiscFromDevice(remoteDiscState.key, name));
+  window.addEventListener("pagehide", flushRemoteDisc);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushRemoteDisc(); });
+
+  fetch(url, { method: "HEAD", credentials: "same-origin", cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`the disc answered HTTP ${response.status}`);
+      const size = Number(response.headers.get("Content-Length"));
+      if (!size) throw new Error("the server gave no size for the disc");
+      if (response.headers.get("Accept-Ranges") === "none") throw new Error("the server doesn't do Range requests");
+      const disc = new RemoteDisc({
+        url: url.href,
+        name,
+        size,
+        etag: response.headers.get("ETag"),
+        lastModified: response.headers.get("Last-Modified"),
+        ...flags
+      });
+      remoteDiscState.disc = disc;
+      remoteDiscState.key = discCacheKey(disc.url);
+      elements.gameSize.textContent = formatBytes(size);
+      elements.dropBadge.textContent = `Start ${name}`;
+      elements.dropBadge.classList.add("start");
+      const start = (event) => {
+        event.preventDefault();
+        elements.dropZone.removeEventListener("click", start);
+        startRemoteDisc(disc);
+      };
+      elements.dropZone.addEventListener("click", start);
+      setStatus(`${name} (${formatBytes(size)}) — click the screen to start`);
+      renderDiscPanel(null);
+    })
+    .catch((error) => {
+      elements.dropBadge.textContent = "Disc unavailable";
+      setStatus(error.message, "error");
+    });
+}
+
+async function startRemoteDisc(disc) {
+  if (disc.opfs) askPersistOnce();
+  elements.dropBadge.textContent = "Starting…";
+  startDiscPolling();
+  let profileApplied = false;
+  if (disc.opfs && elements.discDownloadFirst.checked) {
+    await applyGameProfile(disc);
+    profileApplied = true;
+    const prepared = await host.prepareRemoteDisc(disc).catch((error) => {
+      setStatus(`The download could not start: ${error.message}`, "error");
+      return null;
+    });
+    if (prepared?.disc) {
+      showDiscStats(prepared.disc);
+      if (prepared.disc.mode === "cached" && !prepared.disc.complete) await waitForFullDownload();
+      else if (prepared.disc.mode !== "cached") setStatus(`Starting without the full download: ${prepared.disc.reason}`);
+    }
+    elements.dropBadge.textContent = "Starting…";
+  }
+  await mountFile(disc, { profileApplied });
+  elements.dropBadge.textContent = "";
+  elements.dropBadge.classList.remove("start");
+}
+
+// "Download fully before starting": the boot waits for the bitmap to be complete. The
+// badge counts it up; a click starts the game at once (the download carries on).
+function waitForFullDownload() {
+  return new Promise((resolve) => {
+    let timer = null;
+    const finish = () => {
+      clearInterval(timer);
+      elements.dropZone.removeEventListener("click", skip);
+      resolve();
+    };
+    const skip = (event) => {
+      event.preventDefault();
+      finish();
+    };
+    elements.dropZone.addEventListener("click", skip);
+    timer = setInterval(async () => {
+      const stats = await pollDiscStats();
+      if (!stats) return;
+      if (stats.mode !== "cached" || stats.complete) {
+        finish();
+        return;
+      }
+      const pct = stats.size ? Math.floor((stats.storedBytes / stats.size) * 100) : 0;
+      elements.dropBadge.textContent = `Downloading ${pct}% · ${formatDiscRate(stats.rate)} — click to start now`;
+    }, 500);
+  });
+}
+
+function startDiscPolling() {
+  if (remoteDiscState.poll) return;
+  remoteDiscState.poll = setInterval(pollDiscStats, 1000);
+}
+
+async function pollDiscStats() {
+  try {
+    const response = await host.discRequest("discStats");
+    if (!response?.disc) return null;
+    showDiscStats(response.disc);
+    return response.disc;
+  } catch {
+    return null;    // the worker is busy or gone
+  }
+}
+
+function showDiscStats(stats) {
+  remoteDiscState.stats = stats;
+  window.__discStats = stats;
+  renderDiscPanel(stats);
+  const now = performance.now();
+  if (stats.complete !== remoteDiscState.complete || now - remoteDiscState.libraryAt > 15000) {
+    remoteDiscState.complete = stats.complete;
+    remoteDiscState.libraryAt = now;
+    refreshDiscLibrary();
+  }
+}
+
+function formatDiscRate(bytesPerSecond) {
+  return `${((Number(bytesPerSecond) || 0) / 1e6).toFixed(1)} MB/s`;
+}
+
+// "On this device: 1.2 GB of 1.4 GB · 11.8 MB/s" from the worker's numbers, or from the
+// listing before the worker exists.
+async function renderDiscPanel(stats) {
+  const disc = remoteDiscState.disc;
+  if (!disc) return;
+  let line;
+  if (stats) {
+    if (stats.mode === "cached") {
+      const moving = stats.sequential === "running" || stats.sequential === "parked";
+      line = stats.complete
+        ? `On this device: ${formatDiscBytes(stats.size)} (all of it)`
+        : `On this device: ${formatDiscBytes(stats.storedBytes)} of ${formatDiscBytes(stats.size)}${moving ? ` · ${formatDiscRate(stats.rate)}` : ""}`;
+    } else {
+      line = `Streaming only: ${stats.reason || "no copy on this device"}`;
+    }
+    elements.discNetNote.textContent =
+      `${formatDiscBytes(stats.bytes)} from the network · waited ${stats.waits}× (${(stats.waitMs / 1000).toFixed(1)} s)`;
+    elements.discRemoveButton.disabled = stats.mode !== "cached";
+  } else if (!disc.opfs) {
+    line = "Streaming only: turned off (?opfs=0)";
+  } else {
+    const entry = await opfsRoot().then((root) => readCachedDiscEntry(root, disc)).catch(() => null);
+    if (remoteDiscState.stats) return;     // the worker's numbers arrived meanwhile
+    line = !entry
+      ? "On this device: nothing yet"
+      : !entry.matches
+        ? "On this device: an older version (it will be replaced)"
+        : entry.complete
+          ? `On this device: ${formatDiscBytes(entry.size)} (all of it)`
+          : `On this device: ${formatDiscBytes(entry.storedBytes)} of ${formatDiscBytes(entry.size)}`;
+    elements.discRemoveButton.disabled = !entry;
+  }
+  elements.discCacheNote.textContent = line;
+}
+
+// Asked once, on the first Start with a copy on this device: without it the browser may
+// evict a multi-gigabyte image under storage pressure (an evicted copy just starts over).
+function askPersistOnce() {
+  if (!navigator.storage?.persist) return;
+  try {
+    if (localStorage.getItem(DISC_PERSIST_ASKED_KEY)) return;
+    localStorage.setItem(DISC_PERSIST_ASKED_KEY, "1");
+  } catch {
+    return;
+  }
+  navigator.storage.persisted()
+    .then((already) => already || navigator.storage.persist())
+    .then((granted) => console.log(`[disc] persistent storage ${granted ? "granted" : "not granted"}`))
+    .catch(() => {});
+}
+
+function flushRemoteDisc() {
+  try { host.discRequest("discFlush").catch(() => {}); } catch { /* no worker yet */ }
+}
+
+function wireDiscLibrary() {
+  if (!navigator.storage?.getDirectory || !elements.discLibrary) return;
+  elements.discLibrary.hidden = false;
+  refreshDiscLibrary();
+}
+
+async function refreshDiscLibrary() {
+  const root = await opfsRoot();
+  if (!root || !elements.discLibraryList) return;
+  let discs = [];
+  try {
+    discs = await listCachedDiscs(root);
+  } catch (error) {
+    console.warn("[disc] listing the discs on this device failed:", error);
+  }
+  const rows = [];
+  let total = 0;
+  for (const disc of discs) {
+    const live = disc.key === remoteDiscState.key && remoteDiscState.stats?.mode === "cached" ? remoteDiscState.stats : null;
+    const stored = live ? live.storedBytes : disc.storedBytes;
+    const complete = live ? live.complete : disc.complete;
+    total += stored ?? disc.size;
+    const row = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = disc.name;
+    if (disc.url) label.title = disc.url;
+    const size = document.createElement("strong");
+    size.textContent = stored == null || complete
+      ? formatDiscBytes(disc.size)
+      : `${formatDiscBytes(stored)} of ${formatDiscBytes(disc.size)}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => removeDiscFromDevice(disc.key, disc.name));
+    row.append(label, size, remove);
+    rows.push(row);
+  }
+  if (!rows.length) {
+    const empty = document.createElement("li");
+    empty.className = "muted compact";
+    empty.textContent = "None yet. A disc opened with ?disc= is kept here.";
+    rows.push(empty);
+  }
+  elements.discLibraryList.replaceChildren(...rows);
+  elements.discLibraryTotal.textContent = discs.length ? `${discs.length} · ${formatDiscBytes(total)}` : "";
+}
+
+// The running disc's copy is released by the worker first (it holds the files open);
+// any other copy goes straight from here. Another tab holding it is the one refusal.
+async function removeDiscFromDevice(key, name) {
+  if (!key) return;
+  try {
+    if (key === remoteDiscState.key) {
+      const response = await host.discRequest("discRemove");
+      if (response?.disc) showDiscStats(response.disc);
+    }
+    await removeCachedDisc(await opfsRoot(), key);
+    setStatus(`${name} removed from this device`);
+  } catch (error) {
+    setStatus(error?.name === "NoModificationAllowedError"
+      ? `${name} is open in another tab; close it there first`
+      : `Could not remove ${name}: ${error?.message || error}`, "error");
+  }
+  if (key === remoteDiscState.key && !remoteDiscState.stats) renderDiscPanel(null);
+  refreshDiscLibrary();
 }
 
 async function runSmokeScenario() {

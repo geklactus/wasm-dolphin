@@ -53,13 +53,38 @@ const server = createServer((request, response) => {
   }
 
   const contentType = mimeTypes.get(extname(filePath)) ?? "application/octet-stream";
-  response.writeHead(200, {
+  const stats = statSync(filePath);
+  // Range requests, HEAD and validators, so a disc image under this directory can be
+  // opened with ?disc=<path> (the page reads it a block at a time and keeps a copy).
+  const headers = {
     "content-type": contentType,
     "cache-control": "no-store",
     "cross-origin-opener-policy": "same-origin",
-    "cross-origin-embedder-policy": "require-corp"
-  });
-  createReadStream(filePath).pipe(response);
+    "cross-origin-embedder-policy": "require-corp",
+    "accept-ranges": "bytes",
+    etag: `"${stats.size.toString(16)}-${Math.trunc(stats.mtimeMs).toString(16)}"`,
+    "last-modified": stats.mtime.toUTCString()
+  };
+  const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range || "");
+  let start = 0;
+  let end = stats.size - 1;
+  if (range) {
+    start = Number(range[1]);
+    end = range[2] ? Math.min(Number(range[2]), stats.size - 1) : stats.size - 1;
+    if (start > end) {
+      response.writeHead(416, { ...headers, "content-range": `bytes */${stats.size}` });
+      response.end();
+      return;
+    }
+    headers["content-range"] = `bytes ${start}-${end}/${stats.size}`;
+  }
+  headers["content-length"] = stats.size === 0 ? 0 : end - start + 1;
+  response.writeHead(range ? 206 : 200, headers);
+  if (request.method === "HEAD" || stats.size === 0) {
+    response.end();
+    return;
+  }
+  createReadStream(filePath, { start, end }).pipe(response);
 });
 
 // Open the page in the user's browser. Best effort by design: a failure here
